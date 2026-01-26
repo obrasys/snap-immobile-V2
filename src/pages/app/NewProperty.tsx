@@ -1,24 +1,68 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Building2, MapPin, StickyNote } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { Search, UserRoundCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { TopBar, IconTopButton } from "@/components/app/TopBar";
 import { useAuth } from "@/lib/auth";
 import { createProperty } from "@/lib/snapdb";
-import { showSuccess, showError } from "@/utils/toast";
+import { showError, showSuccess } from "@/utils/toast";
+import { propertyCoverUrl } from "@/lib/images";
+
+const STATES = [
+  "AC",
+  "AL",
+  "AP",
+  "AM",
+  "BA",
+  "CE",
+  "DF",
+  "ES",
+  "GO",
+  "MA",
+  "MT",
+  "MS",
+  "MG",
+  "PA",
+  "PB",
+  "PR",
+  "PE",
+  "PI",
+  "RJ",
+  "RN",
+  "RS",
+  "RO",
+  "RR",
+  "SC",
+  "SP",
+  "SE",
+  "TO",
+];
 
 export default function NewProperty() {
   const nav = useNavigate();
   const { user } = useAuth();
 
   const [name, setName] = useState("");
-  const [address, setAddress] = useState("");
-  const [description, setDescription] = useState("");
+  const [street, setStreet] = useState("");
+  const [number, setNumber] = useState("");
+  const [neighborhood, setNeighborhood] = useState("");
+  const [state, setState] = useState("SP");
+  const [cep, setCep] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const inputClass = useMemo(
+    () =>
+      "h-11 rounded-2xl border-white/60 bg-transparent text-white placeholder:text-white/65 focus-visible:ring-white/25",
+    [],
+  );
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -26,9 +70,12 @@ export default function NewProperty() {
 
     try {
       setLoading(true);
-      const p = createProperty({ userId: user.id, name, address, description });
+      const address = `${street}, ${number} - ${neighborhood} - ${state} • CEP ${cep}`
+        .replace(/\s+/g, " ")
+        .trim();
+      createProperty({ userId: user.id, name, address });
       showSuccess("Imóvel criado com sucesso");
-      nav(`/app/properties/${p.id}`, { replace: true });
+      nav("/app/properties", { replace: true });
     } catch {
       showError("Erro ao criar imóvel");
     } finally {
@@ -37,67 +84,112 @@ export default function NewProperty() {
   }
 
   return (
-    <AppShell title="Criar imóvel" backTo="/app/properties">
-      <Card className="rounded-3xl border-primary/10 bg-background/80 p-5 shadow-sm">
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div className="flex items-start gap-3">
-            <div className="rounded-2xl bg-primary/10 p-2 text-primary ring-1 ring-primary/15">
-              <Building2 className="h-5 w-5" />
-            </div>
+    <div className="min-h-screen bg-background">
+      <TopBar
+        title="IMÓVEIS"
+        left={
+          <IconTopButton ariaLabel="Pesquisar" onClick={() => showSuccess("Pesquisa: em breve")}>
+            <Search className="h-5 w-5 text-[hsl(var(--cta))]" />
+          </IconTopButton>
+        }
+        right={
+          <IconTopButton ariaLabel="Configurações" onClick={() => nav("/app/settings")}>
+            <UserRoundCog className="h-5 w-5 text-[hsl(var(--cta))]" />
+          </IconTopButton>
+        }
+      />
+
+      <main className="mx-auto max-w-md px-4 pb-6 pt-2">
+        <div className="text-xs text-muted-foreground">Apartamento 3/4 em Boa Viagem</div>
+        <div className="mt-2 overflow-hidden rounded-3xl bg-muted shadow-sm">
+          <img
+            alt="Imagem do imóvel"
+            src={propertyCoverUrl("new-property")}
+            className="h-44 w-full object-cover"
+            loading="lazy"
+          />
+        </div>
+      </main>
+
+      <section className="relative mx-auto max-w-md">
+        <div className="rounded-t-[2.25rem] bg-primary px-5 pb-7 pt-7 text-white">
+          <div className="text-2xl font-extrabold tracking-tight">Criar um novo imóvel</div>
+          <div className="mt-1 text-sm text-white/85">
+            Crie um novo imóvel cada vez que começar a capturar um novo imóvel.
+          </div>
+
+          <form onSubmit={onSubmit} className="mt-5 space-y-4">
             <div>
-              <div className="text-lg font-extrabold tracking-tight">Novo imóvel</div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                Use um nome curto para aparecer bem na galeria.
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="name">Nome</Label>
-            <Input
-              id="name"
-              className="h-11 rounded-2xl"
-              placeholder="Ex: Apto Jardins 120m²"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="address">Endereço</Label>
-            <div className="relative">
-              <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <div className="text-xs font-semibold text-white/80">Detalhes do imóvel</div>
               <Input
-                id="address"
-                className="h-11 rounded-2xl pl-10"
-                placeholder="Rua, número, bairro, cidade"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
+                className={`${inputClass} mt-2`}
+                placeholder="Nome"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
                 required
               />
             </div>
-          </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="desc">Descrição (opcional)</Label>
-            <div className="relative">
-              <StickyNote className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Textarea
-                id="desc"
-                className="min-h-24 rounded-2xl pl-10"
-                placeholder="Ex: sala com janelão, vista livre, excelente iluminação..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-white/80">Localização do imóvel</div>
+              <Input
+                className={inputClass}
+                placeholder="Nome da Rua"
+                value={street}
+                onChange={(e) => setStreet(e.target.value)}
+                required
               />
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  className={inputClass}
+                  placeholder="Número"
+                  value={number}
+                  onChange={(e) => setNumber(e.target.value)}
+                  required
+                />
+                <Input
+                  className={inputClass}
+                  placeholder="Bairro"
+                  value={neighborhood}
+                  onChange={(e) => setNeighborhood(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Select value={state} onValueChange={setState}>
+                  <SelectTrigger className="h-11 rounded-2xl border-white/60 bg-transparent text-white focus:ring-white/25">
+                    <SelectValue placeholder="Estado" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl">
+                    {STATES.map((uf) => (
+                      <SelectItem key={uf} value={uf}>
+                        {uf}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  className={inputClass}
+                  placeholder="CEP"
+                  value={cep}
+                  onChange={(e) => setCep(e.target.value)}
+                  required
+                />
+              </div>
             </div>
-          </div>
 
-          <Button disabled={loading} className="h-11 w-full rounded-2xl" type="submit">
-            Criar imóvel
-          </Button>
-        </form>
-      </Card>
-    </AppShell>
+            <div className="pt-1">
+              <Button
+                disabled={loading}
+                type="submit"
+                className="h-11 w-full rounded-2xl bg-[hsl(var(--cta))] text-white hover:bg-[hsl(var(--cta))]/90"
+              >
+                Guardar
+              </Button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </div>
   );
 }

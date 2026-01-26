@@ -69,7 +69,11 @@ export function loginWithGoogleDemo(): User {
   const user: User = {
     id: uid(),
     name: "Conta Google (Demo)",
+    lastName: "",
     email,
+    phone: "",
+    cpf: "",
+    company: "",
     photoUrl: "https://api.dicebear.com/9.x/thumbs/svg?seed=SnapImmobile",
     role: "corretor",
     plan: "free",
@@ -86,7 +90,11 @@ export function loginWithGoogleDemo(): User {
 
 export function registerWithEmail(args: {
   name: string;
+  lastName?: string;
   email: string;
+  phone?: string;
+  cpf?: string;
+  company?: string;
   password: string;
   role: UserRole;
 }): User {
@@ -97,7 +105,11 @@ export function registerWithEmail(args: {
   const user: User & { password: string } = {
     id: uid(),
     name: args.name.trim(),
+    lastName: args.lastName?.trim() || "",
     email: args.email.trim().toLowerCase(),
+    phone: args.phone?.trim() || "",
+    cpf: args.cpf?.trim() || "",
+    company: args.company?.trim() || "",
     password: args.password,
     role: args.role,
     plan: "free",

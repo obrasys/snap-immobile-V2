@@ -1,15 +1,16 @@
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
-import { Building2, MapPin, Plus } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
-import { Button } from "@/components/ui/button";
+import { Link, useNavigate } from "react-router-dom";
+import { Camera, Search, UserRoundCog } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
 import { listProperties } from "@/lib/snapdb";
+import { propertyCoverUrl } from "@/lib/images";
+import { TopBar, IconTopButton } from "@/components/app/TopBar";
+import { showSuccess } from "@/utils/toast";
 
 export default function Properties() {
   const { user } = useAuth();
+  const nav = useNavigate();
 
   const properties = useMemo(() => {
     if (!user) return [];
@@ -17,63 +18,62 @@ export default function Properties() {
   }, [user]);
 
   return (
-    <AppShell title="Seus imóveis">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-sm font-semibold tracking-tight text-muted-foreground">
-            Organize por imóvel
-          </div>
-          <div className="mt-1 text-xl font-extrabold tracking-tight">
-            Imóveis
-          </div>
-        </div>
-        <Button asChild className="h-11 rounded-2xl">
-          <Link to="/app/properties/new">
-            <Plus className="mr-2 h-4 w-4" /> Novo
-          </Link>
-        </Button>
-      </div>
+    <div className="min-h-screen bg-background">
+      <TopBar
+        title="IMÓVEIS"
+        left={
+          <IconTopButton
+            ariaLabel="Pesquisar"
+            onClick={() => showSuccess("Pesquisa: em breve")}
+          >
+            <Search className="h-5 w-5 text-[hsl(var(--cta))]" />
+          </IconTopButton>
+        }
+        right={
+          <IconTopButton ariaLabel="Configurações" onClick={() => nav("/app/settings")}>
+            <UserRoundCog className="h-5 w-5 text-[hsl(var(--cta))]" />
+          </IconTopButton>
+        }
+      />
 
-      <div className="mt-4 grid gap-3">
+      <main className="mx-auto max-w-md px-4 pb-24 pt-2">
         {properties.length === 0 ? (
-          <Card className="rounded-3xl border-primary/10 bg-background/80 p-5 shadow-sm">
-            <div className="flex items-start gap-3">
-              <div className="rounded-2xl bg-primary/10 p-2 text-primary ring-1 ring-primary/15">
-                <Building2 className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-sm font-semibold tracking-tight">
-                  Comece criando seu primeiro imóvel
-                </div>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  Depois, capture sessões HDR e mantenha tudo na galeria.
-                </div>
-              </div>
+          <div className="mt-4 rounded-3xl border border-primary/10 bg-secondary/40 p-5">
+            <div className="text-base font-extrabold tracking-tight">
+              Nenhum imóvel ainda
             </div>
-          </Card>
+            <div className="mt-1 text-sm text-muted-foreground">
+              Toque no botão da câmera para criar o seu primeiro imóvel.
+            </div>
+          </div>
         ) : null}
 
-        {properties.map((p) => (
-          <Link key={p.id} to={`/app/properties/${p.id}`} className="block">
-            <Card className="group rounded-3xl border-primary/10 bg-background/80 p-5 shadow-sm transition-colors hover:bg-background">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate text-base font-extrabold tracking-tight">
-                    {p.name}
-                  </div>
-                  <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-                    <MapPin className="h-4 w-4" />
-                    <span className="truncate">{p.address}</span>
-                  </div>
-                </div>
-                <Badge className="rounded-full bg-primary/10 text-primary hover:bg-primary/10">
-                  Abrir
-                </Badge>
-              </div>
-            </Card>
-          </Link>
-        ))}
-      </div>
-    </AppShell>
+        <div className="mt-3 grid gap-5">
+          {properties.map((p) => (
+            <div key={p.id} className="space-y-2">
+              <div className="text-xs text-muted-foreground">{p.name}</div>
+              <Link to={`/app/properties/${p.id}`} className="block">
+                <Card className="overflow-hidden rounded-3xl border-0 bg-muted shadow-sm">
+                  <img
+                    alt={p.name}
+                    src={propertyCoverUrl(p.id)}
+                    className="h-44 w-full object-cover"
+                    loading="lazy"
+                  />
+                </Card>
+              </Link>
+            </div>
+          ))}
+        </div>
+      </main>
+
+      <button
+        className="fixed bottom-8 left-1/2 z-40 grid h-14 w-14 -translate-x-1/2 place-items-center rounded-full bg-[hsl(var(--cta))] text-white shadow-lg shadow-[hsl(var(--cta))]/25 active:scale-[0.98]"
+        onClick={() => nav("/app/properties/new")}
+        aria-label="Criar imóvel"
+      >
+        <Camera className="h-6 w-6" />
+      </button>
+    </div>
   );
 }

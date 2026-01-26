@@ -16,7 +16,11 @@ type AuthContextValue = {
   loginGoogle: () => Promise<void>;
   register: (args: {
     name: string;
+    lastName?: string;
     email: string;
+    phone?: string;
+    cpf?: string;
+    company?: string;
     password: string;
     role: UserRole;
   }) => Promise<void>;

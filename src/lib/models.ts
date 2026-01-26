@@ -4,7 +4,11 @@ export type UserPlan = "free" | "pro";
 export type User = {
   id: string;
   name: string;
+  lastName?: string;
   email: string;
+  phone?: string;
+  cpf?: string;
+  company?: string;
   photoUrl?: string;
   role: UserRole;
   plan: UserPlan;

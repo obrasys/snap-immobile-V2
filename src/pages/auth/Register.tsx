@@ -1,38 +1,47 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, BadgeCheck } from "lucide-react";
-import { BrandMark } from "@/components/app/BrandMark";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, RotateCw } from "lucide-react";
+import { SnapLogo } from "@/components/app/SnapLogo";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type { UserRole } from "@/lib/models";
-import { useAuth } from "@/lib/auth";
 import { showError, showSuccess } from "@/utils/toast";
+import { useAuth } from "@/lib/auth";
 
 export default function Register() {
   const nav = useNavigate();
   const { register } = useAuth();
 
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<UserRole>("corretor");
+  const [phone, setPhone] = useState("");
+  const [cpf, setCpf] = useState("");
+  const [company, setCompany] = useState("");
   const [password, setPassword] = useState("");
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [acceptPrivacy, setAcceptPrivacy] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  const inputClass = useMemo(
+    () =>
+      "h-12 rounded-2xl border-transparent bg-muted/70 px-4 text-[15px] shadow-sm placeholder:text-muted-foreground/70 focus-visible:ring-primary/25",
+    [],
+  );
 
+  function resetForm() {
+    setFirstName("");
+    setLastName("");
+    setEmail("");
+    setPhone("");
+    setCpf("");
+    setCompany("");
+    setPassword("");
+    setAcceptTerms(false);
+    setAcceptPrivacy(false);
+  }
+
+  async function onSubmit() {
     if (!acceptTerms || !acceptPrivacy) {
       showError("Você precisa aceitar Termos e Política de Privacidade");
       return;
@@ -40,7 +49,16 @@ export default function Register() {
 
     try {
       setLoading(true);
-      await register({ name, email, password, role });
+      await register({
+        name: firstName,
+        lastName,
+        email,
+        phone,
+        cpf,
+        company,
+        password,
+        role: "corretor",
+      });
       showSuccess("Conta criada com sucesso");
       nav("/app/properties", { replace: true });
     } catch (err) {
@@ -51,138 +69,151 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen bg-secondary/40 px-4 py-10">
-      <div className="mx-auto max-w-md">
-        <BrandMark />
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto max-w-md px-6 pb-28 pt-10">
+        <div className="flex items-center justify-between">
+          <SnapLogo size="sm" />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-2xl"
+            onClick={resetForm}
+            aria-label="Limpar"
+          >
+            <RotateCw className="h-5 w-5 text-primary" />
+          </Button>
+        </div>
 
         <div className="mt-10">
-          <h1 className="text-2xl font-extrabold tracking-tight">Criar conta</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight">Crie a sua conta</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Comece no plano Free e faça upgrade quando precisar.
+            Preencha os seus dados
           </p>
+        </div>
 
-          <Card className="mt-5 rounded-3xl border-primary/10 bg-background/80 p-5 shadow-sm">
-            <form onSubmit={onSubmit} className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="name">Nome</Label>
-                <Input
-                  id="name"
-                  className="h-11 rounded-2xl"
-                  placeholder="Seu nome"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </div>
+        <div className="mt-7 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              className={inputClass}
+              placeholder="Nome"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              required
+            />
+            <Input
+              className={inputClass}
+              placeholder="Sobre Nome"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+            />
+          </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="email">E-mail</Label>
-                <Input
-                  id="email"
-                  inputMode="email"
-                  autoComplete="email"
-                  className="h-11 rounded-2xl"
-                  placeholder="seu@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
+          <Input
+            className={inputClass}
+            placeholder="E-Mail"
+            inputMode="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Perfil</Label>
-                  <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
-                    <SelectTrigger className="h-11 rounded-2xl">
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="corretor">Corretor</SelectItem>
-                      <SelectItem value="proprietario">Proprietário</SelectItem>
-                      <SelectItem value="fotografo">Fotógrafo</SelectItem>
-                      <SelectItem value="outro">Outro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="password">Senha</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    autoComplete="new-password"
-                    className="h-11 rounded-2xl"
-                    placeholder="Crie uma senha"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
+          <Input
+            className={inputClass}
+            placeholder="Telefone"
+            inputMode="tel"
+            autoComplete="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+          />
 
-              <div className="rounded-2xl border bg-background/70 p-3">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 rounded-xl bg-primary/10 p-2 text-primary ring-1 ring-primary/15">
-                    <BadgeCheck className="h-4 w-4" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="flex items-start gap-2 text-sm">
-                      <Checkbox
-                        checked={acceptTerms}
-                        onCheckedChange={(v) => setAcceptTerms(Boolean(v))}
-                        className="mt-0.5"
-                      />
-                      <span className="text-muted-foreground">
-                        Eu li e aceito os{" "}
-                        <a
-                          className="font-semibold text-primary underline-offset-4 hover:underline"
-                          href="https://snapimmobile.app/termos-de-uso/"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Termos de Uso
-                        </a>
-                        .
-                      </span>
-                    </label>
+          <Input
+            className={inputClass}
+            placeholder="CPF"
+            value={cpf}
+            onChange={(e) => setCpf(e.target.value)}
+          />
 
-                    <label className="flex items-start gap-2 text-sm">
-                      <Checkbox
-                        checked={acceptPrivacy}
-                        onCheckedChange={(v) => setAcceptPrivacy(Boolean(v))}
-                        className="mt-0.5"
-                      />
-                      <span className="text-muted-foreground">
-                        Eu li e aceito a{" "}
-                        <a
-                          className="font-semibold text-primary underline-offset-4 hover:underline"
-                          href="https://snapimmobile.app/politica-privacidade/"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Política de Privacidade
-                        </a>
-                        .
-                      </span>
-                    </label>
-                  </div>
-                </div>
-              </div>
+          <Input
+            className={inputClass}
+            placeholder="Empresa"
+            value={company}
+            onChange={(e) => setCompany(e.target.value)}
+          />
 
-              <Button disabled={loading} className="h-11 w-full rounded-2xl" type="submit">
-                Criar conta <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
+          <Input
+            className={inputClass}
+            placeholder="Senha"
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
 
-              <div className="text-center text-sm text-muted-foreground">
-                Já tem conta?{" "}
-                <Link
-                  to="/auth/login"
+          <div className="pt-2 space-y-2">
+            <label className="flex items-start gap-2 text-xs text-muted-foreground">
+              <Checkbox
+                className="mt-0.5"
+                checked={acceptTerms}
+                onCheckedChange={(v) => setAcceptTerms(Boolean(v))}
+              />
+              <span>
+                Aceito os{" "}
+                <a
                   className="font-semibold text-primary underline-offset-4 hover:underline"
+                  href="https://snapimmobile.app/termos-de-uso/"
+                  target="_blank"
+                  rel="noreferrer"
                 >
-                  Entrar
-                </Link>
-              </div>
-            </form>
-          </Card>
+                  Termos de Uso
+                </a>
+                .
+              </span>
+            </label>
+
+            <label className="flex items-start gap-2 text-xs text-muted-foreground">
+              <Checkbox
+                className="mt-0.5"
+                checked={acceptPrivacy}
+                onCheckedChange={(v) => setAcceptPrivacy(Boolean(v))}
+              />
+              <span>
+                Aceito a{" "}
+                <a
+                  className="font-semibold text-primary underline-offset-4 hover:underline"
+                  href="https://snapimmobile.app/politica-privacidade/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Política de Privacidade
+                </a>
+                .
+              </span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+        <div className="mx-auto flex max-w-md items-center justify-between px-6 py-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-2xl"
+            onClick={() => nav(-1)}
+            aria-label="Voltar"
+          >
+            <ArrowLeft className="h-6 w-6 text-muted-foreground" />
+          </Button>
+
+          <Button
+            disabled={loading}
+            onClick={onSubmit}
+            className="h-11 rounded-full bg-muted px-7 font-extrabold tracking-wide text-foreground hover:bg-muted/80"
+          >
+            CRIAR CONTA
+          </Button>
         </div>
       </div>
     </div>

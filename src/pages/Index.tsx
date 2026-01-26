@@ -1,10 +1,10 @@
-import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { useEffect } from "react";
+import { SnapLogo } from "@/components/app/SnapLogo";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { BrandMark } from "@/components/app/BrandMark";
+import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/lib/auth";
+import { welcomeBackgroundUrl } from "@/lib/images";
 
 const Index = () => {
   const { user } = useAuth();
@@ -15,70 +15,57 @@ const Index = () => {
   }, [user, nav]);
 
   return (
-    <div className="min-h-screen bg-secondary/40 px-4 py-10">
-      <div className="mx-auto max-w-md">
-        <BrandMark />
+    <div className="relative min-h-screen overflow-hidden bg-background">
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage: `url(${welcomeBackgroundUrl()})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      />
+      <div className="absolute inset-0 bg-primary/65" />
+      <div className="absolute inset-0 bg-black/10" />
 
-        <div className="mt-10 space-y-4">
-          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
-            HDR automático, pronto para venda.
-          </h1>
-          <p className="text-base leading-relaxed text-muted-foreground">
-            Capture 9 exposições com um único fluxo guiado, envie e receba sua
-            foto HDR final na galeria do imóvel.
-          </p>
+      <div className="relative mx-auto flex min-h-screen max-w-md flex-col px-6 py-10">
+        <div className="mx-auto mt-6">
+          <SnapLogo size="lg" tone="white" />
+        </div>
 
-          <Card className="rounded-3xl border-primary/10 bg-background/80 p-5 shadow-sm">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 rounded-2xl bg-primary/10 p-2 text-primary ring-1 ring-primary/15">
-                <Sparkles className="h-5 w-5" />
+        <div className="mt-auto pb-6">
+          <div className="text-center">
+            <div className="text-sm font-extrabold tracking-widest text-white/80">
+              AUMENTE A SUA VISIBILIDADE
+            </div>
+            <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-white/90">
+              Captação profissional fácil, com qualidade visual através do seu
+              smartphone, para melhorar os seus anúncio de imóveis.
+            </p>
+          </div>
+
+          <div className="mt-6 space-y-4">
+            <Button
+              asChild
+              variant="outline"
+              className="h-12 w-full rounded-full border-white/70 bg-transparent text-white hover:bg-white/10 hover:text-white"
+            >
+              <Link to="/auth/login">JÁ TEM CONTA? ENTRE AQUI</Link>
+            </Button>
+
+            <div className="flex items-center gap-4">
+              <Separator className="bg-white/35" />
+              <div className="text-xs font-bold tracking-widest text-white/80">
+                OU
               </div>
-              <div className="min-w-0">
-                <div className="text-sm font-semibold tracking-tight">
-                  Mobile-first • fluxo guiado • multiusuário
-                </div>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  Protótipo web com arquitetura pronta para evoluir para SaaS.
-                </div>
-              </div>
+              <Separator className="bg-white/35" />
             </div>
 
-            <div className="mt-4 flex gap-2">
-              <Button asChild className="h-11 flex-1 rounded-2xl">
-                <Link to="/auth/login">
-                  Entrar <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-              <Button
-                asChild
-                variant="secondary"
-                className="h-11 flex-1 rounded-2xl"
-              >
-                <Link to="/auth/register">Criar conta</Link>
-              </Button>
-            </div>
-          </Card>
-
-          <div className="text-xs text-muted-foreground">
-            Ao continuar você concorda com os nossos{" "}
-            <a
-              className="font-semibold text-primary underline-offset-4 hover:underline"
-              href="https://snapimmobile.app/termos-de-uso/"
-              target="_blank"
-              rel="noreferrer"
+            <Button
+              asChild
+              className="h-12 w-full rounded-full bg-[hsl(var(--cta))] text-[hsl(var(--cta-foreground))] hover:bg-[hsl(var(--cta))]/90"
             >
-              Termos de Uso
-            </a>{" "}
-            e{" "}
-            <a
-              className="font-semibold text-primary underline-offset-4 hover:underline"
-              href="https://snapimmobile.app/politica-privacidade/"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Política de Privacidade
-            </a>
-            .
+              <Link to="/auth/register">FAÇA UM TESTE GRATUITO!</Link>
+            </Button>
           </div>
         </div>
       </div>

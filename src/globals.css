@@ -17,6 +17,10 @@
     --brand: 267 39% 41%; /* #654092 */
     --brand-foreground: 0 0% 100%;
 
+    /* CTA accent (laranja do layout) */
+    --cta: 18 82% 52%;
+    --cta-foreground: 0 0% 100%;
+
     --primary: var(--brand);
     --primary-foreground: var(--brand-foreground);
 
