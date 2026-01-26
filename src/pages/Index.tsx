@@ -29,7 +29,7 @@ const Index = () => {
 
       <div className="relative mx-auto flex min-h-screen max-w-md flex-col px-6 py-10">
         <div className="mx-auto mt-6">
-          <SnapLogo size="lg" tone="white" />
+          <SnapLogo size="lg" variant="white" />
         </div>
 
         <div className="mt-auto pb-6">
