@@ -1,5 +1,5 @@
 import { startOfMonth } from "date-fns";
-import type { HDRSession, Property, User, UserPlan, UserRole } from "@/lib/models";
+import type { HDRSession, PhotoMode, Property, User, UserPlan, UserRole } from "@/lib/models";
 import { hasSupabase, supabase } from "@/lib/supabaseClient";
 import * as local from "@/lib/snapdb.local";
 
@@ -273,7 +273,7 @@ export async function listSessions(propertyId: string): Promise<HDRSession[]> {
 
   const { data, error } = await supabase
     .from("hdr_sessions")
-    .select("id, property_id, images_count, hdr_image_data_url, status, error_message, created_at")
+    .select("id, property_id, images_count, hdr_image_data_url, status, error_message, created_at, mode")
     .eq("property_id", propertyId)
     .order("created_at", { ascending: false });
 
@@ -288,6 +288,7 @@ export async function listSessions(propertyId: string): Promise<HDRSession[]> {
       status: s.status,
       errorMessage: s.error_message ?? undefined,
       createdAt: s.created_at,
+      mode: s.mode as PhotoMode ?? undefined,
     })) ?? []
   );
 }
@@ -321,18 +322,22 @@ export async function createHdrSession(args: {
   userId: string;
   propertyId: string;
   imagesCount: number;
+  mode: PhotoMode; // Adicionado o modo da foto
+  id?: string; // Permitir ID opcional para rastreamento
 }): Promise<HDRSession> {
   if (!hasSupabase) return local.createHdrSession({ propertyId: args.propertyId, imagesCount: args.imagesCount });
 
   const { data, error } = await supabase
     .from("hdr_sessions")
     .insert({
+      id: args.id, // Usar ID fornecido ou deixar o DB gerar
       user_id: args.userId,
       property_id: args.propertyId,
       images_count: args.imagesCount,
       status: "processing",
+      mode: args.mode, // Salvar o modo
     })
-    .select("id, property_id, images_count, hdr_image_data_url, status, error_message, created_at")
+    .select("id, property_id, images_count, hdr_image_data_url, status, error_message, created_at, mode")
     .single();
 
   if (error) throw new Error(error.message);
@@ -345,6 +350,7 @@ export async function createHdrSession(args: {
     status: data.status,
     errorMessage: data.error_message ?? undefined,
     createdAt: data.created_at,
+    mode: data.mode as PhotoMode ?? undefined,
   };
 }
 
@@ -355,6 +361,7 @@ export async function updateHdrSession(sessionId: string, patch: Partial<HDRSess
   if (typeof patch.status !== "undefined") mapped.status = patch.status;
   if (typeof patch.hdrImageDataUrl !== "undefined") mapped.hdr_image_data_url = patch.hdrImageDataUrl;
   if (typeof patch.errorMessage !== "undefined") mapped.error_message = patch.errorMessage;
+  if (typeof patch.mode !== "undefined") mapped.mode = patch.mode;
 
   const { error } = await supabase.from("hdr_sessions").update(mapped).eq("id", sessionId);
   if (error) throw new Error(error.message);

@@ -26,6 +26,8 @@ export type Property = {
 
 export type HDRSessionStatus = "processing" | "done" | "error";
 
+export type PhotoMode = "hp_hdr_exterior" | "hp_hdr_window" | "hp_panorama";
+
 export type HDRSession = {
   id: string;
   propertyId: string;
@@ -34,4 +36,5 @@ export type HDRSession = {
   status: HDRSessionStatus;
   errorMessage?: string;
   createdAt: string; // ISO
+  mode?: PhotoMode; // Adicionado o modo da foto
 };
