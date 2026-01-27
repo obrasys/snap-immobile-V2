@@ -164,6 +164,7 @@ export const WebViewScreen = forwardRef<WebViewScreenRef>((props, ref) => {
           {error || !networkStatus ? renderErrorScreen() : <Loading />}
         </View>
       )}
+      {/* @ts-ignore */}
       <WebView
         ref={internalWebViewRef}
         source={{ uri: WEBVIEW_URL }}
