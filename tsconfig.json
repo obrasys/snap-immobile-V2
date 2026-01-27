@@ -27,7 +27,8 @@
     },
 
     /* Type Roots */
-    "typeRoots": ["./node_modules/@types", "./src/types"] // Explicitamente incluir @types
+    "typeRoots": ["./node_modules/@types", "./src/types"],
+    "types": ["react-native"] // Adicionado para resolver 'Cannot find module react-native'
   },
   "include": ["src", "App.tsx", "src/components/Loading.tsx", "src/screens/WebViewScreen.tsx"],
   "references": [{ "path": "./tsconfig.node.json" }]

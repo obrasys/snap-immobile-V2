@@ -172,7 +172,6 @@ export const WebViewScreen = forwardRef<WebViewScreenRef>((props, ref) => {
           {error || !networkStatus ? renderErrorScreen() : <Loading />}
         </View>
       )}
-      {/* @ts-ignore */}
       <WebView
         ref={internalWebViewRef}
         source={{ uri: WEBVIEW_URL, headers: customHeaders }} // Adiciona os headers customizados
@@ -183,6 +182,7 @@ export const WebViewScreen = forwardRef<WebViewScreenRef>((props, ref) => {
         onHttpError={onHttpError}
         onNavigationStateChange={onNavigationStateChange}
         onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
+        // @ts-ignore - onPermissionRequest é uma propriedade específica do Android e pode não estar na tipagem universal
         onPermissionRequest={Platform.OS === 'android' ? onPermissionRequest : undefined} // Apenas para Android
         // Configurações para persistência de login
         sharedCookiesEnabled={true}
