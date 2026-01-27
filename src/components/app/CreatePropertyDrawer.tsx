@@ -16,7 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { propertyCoverUrl } from "@/lib/images";
 import { createProperty } from "@/lib/snapdb";
 import { showError, showSuccess } from "@/utils/toast";
 
@@ -109,31 +108,22 @@ export function CreatePropertyDrawer({
     <Drawer open={open} onOpenChange={onOpenChange} shouldScaleBackground>
       <DrawerPortal>
         <DrawerOverlay className="bg-black/55" />
-        <DrawerContent className="overflow-hidden rounded-t-[2.25rem] border-0 bg-background p-0">
+        <DrawerContent className="overflow-hidden rounded-t-[2.25rem] border-0 bg-primary p-0">
           <div className="relative max-h-[92dvh] overflow-hidden">
-            <div className="relative h-44 w-full bg-muted min-[420px]:h-48">
-              <img
-                alt="Imagem do imóvel"
-                src={propertyCoverUrl("create-drawer")}
-                className="h-full w-full object-cover"
-                loading="lazy"
-              />
-              <div className="absolute inset-0 bg-black/10" />
+            <div className="relative">
               <DrawerClose asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="absolute right-3 top-3 rounded-2xl bg-background/80 backdrop-blur hover:bg-background"
+                  className="absolute right-3 top-3 rounded-2xl bg-white/10 text-white hover:bg-white/15"
                   aria-label="Fechar"
                 >
                   <X className="h-5 w-5" />
                 </Button>
               </DrawerClose>
-            </div>
 
-            <div className="max-h-[calc(92dvh-11.5rem)] overflow-y-auto">
-              <div className="bg-primary px-5 pb-[calc(env(safe-area-inset-bottom)+1.75rem)] pt-7 text-white sm:px-6">
-                <div className="text-2xl font-extrabold tracking-tight">
+              <div className="px-5 pb-[calc(env(safe-area-inset-bottom)+1.75rem)] pt-7 text-white sm:px-6">
+                <div className="pr-10 text-2xl font-extrabold tracking-tight">
                   Criar um novo imóvel
                 </div>
                 <div className="mt-1 text-sm text-white/85">
