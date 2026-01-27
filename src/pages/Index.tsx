@@ -28,18 +28,18 @@ const Index = () => {
       <div className="absolute inset-0 bg-black/25" />
 
       <div className="relative mx-auto flex min-h-dvh w-full max-w-md flex-col px-6 py-10 sm:max-w-lg sm:px-8 sm:py-12">
-        <div className="mx-auto mt-6">
+        <div className="mx-auto mt-10"> {/* Ajustado o espaçamento superior */}
           <SnapLogo size="lg" variant="white" />
         </div>
 
         <div className="mt-auto pb-6">
           <div className="text-center">
-            <div className="text-sm font-extrabold tracking-widest text-white/80">
+            <div className="text-3xl font-extrabold tracking-tight text-white"> {/* Ajustado tamanho e cor */}
               AUMENTE A SUA VISIBILIDADE
             </div>
-            <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-white/90">
+            <p className="mx-auto mt-2 max-w-sm text-base leading-relaxed text-white"> {/* Ajustado tamanho e cor */}
               Captação profissional fácil, com qualidade visual através do seu
-              smartphone, para melhorar os seus anúncio de imóveis.
+              smartphone.
             </p>
           </div>
 
