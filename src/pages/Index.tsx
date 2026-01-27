@@ -24,8 +24,8 @@ const Index = () => {
           backgroundPosition: "center",
         }}
       />
-      <div className="absolute inset-0 bg-primary/65" />
-      <div className="absolute inset-0 bg-black/10" />
+      <div className="absolute inset-0 bg-primary/80" />
+      <div className="absolute inset-0 bg-black/25" />
 
       <div className="relative mx-auto flex min-h-dvh w-full max-w-md flex-col px-6 py-10 sm:max-w-lg sm:px-8 sm:py-12">
         <div className="mx-auto mt-6">
@@ -52,12 +52,12 @@ const Index = () => {
               <Link to="/auth/login">JÁ TEM CONTA? ENTRE AQUI</Link>
             </Button>
 
-            <div className="flex items-center gap-4">
-              <Separator className="bg-white/35" />
+            <div className="flex items-center justify-center gap-4">
+              <Separator className="h-px w-auto flex-1 bg-white/35" />
               <div className="text-xs font-bold tracking-widest text-white/80">
                 OU
               </div>
-              <Separator className="bg-white/35" />
+              <Separator className="h-px w-auto flex-1 bg-white/35" />
             </div>
 
             <Button
