@@ -12,14 +12,11 @@ import { WebView, WebViewNavigation } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
 import { Loading } from '../components/Loading';
-
-// URL da aplicação web a ser carregada na WebView
-// TODO: Mover para variáveis de ambiente (ex: .env)
-const WEBVIEW_URL = 'https://app.snapimmobile.com.br';
+import { WEBVIEW_URL } from '../services/env'; // Importa a URL da variável de ambiente
 
 // Domínios permitidos para navegação interna na WebView
 const ALLOWED_WEBVIEW_HOSTS = [
-  'app.snapimmobile.com.br',
+  'app.snapimmobile.com.br', // Domínio principal
   // Adicione outros subdomínios de snapimmobile.app se necessário
 ];
 
@@ -105,24 +102,25 @@ export const WebViewScreen = forwardRef<WebViewScreenRef>((props, ref) => {
   const onShouldStartLoadWithRequest = useCallback((request: WebViewNavigation) => {
     const url = request.url;
 
-    // Abrir links de e-mail e telefone externamente
-    if (url.startsWith('mailto:') || url.startsWith('tel:')) {
-      Linking.openURL(url);
-      return false;
-    }
-
-    // Abrir links do Stripe Checkout externamente
-    if (url.includes('checkout.stripe.com')) {
+    // Abrir links de e-mail, telefone, whatsapp e Stripe Checkout externamente
+    if (url.startsWith('mailto:') || url.startsWith('tel:') || url.startsWith('whatsapp:') || url.includes('checkout.stripe.com')) {
       Linking.openURL(url);
       return false;
     }
 
     // Restringir navegação a domínios autorizados
-    const requestHost = new URL(url).hostname;
-    const isAllowedHost = ALLOWED_WEBVIEW_HOSTS.some(host => requestHost === host || requestHost.endsWith(`.${host}`));
+    try {
+      const requestHost = new URL(url).hostname;
+      const isAllowedHost = ALLOWED_WEBVIEW_HOSTS.some(host => requestHost === host || requestHost.endsWith(`.${host}`));
 
-    if (!isAllowedHost) {
-      // Se o domínio não for permitido, abre externamente
+      if (!isAllowedHost) {
+        // Se o domínio não for permitido, abre externamente
+        Linking.openURL(url);
+        return false;
+      }
+    } catch (e) {
+      // Em caso de URL inválida, ou erro ao parsear, abre externamente por segurança
+      console.warn('Invalid URL or error parsing, opening externally:', url, e);
       Linking.openURL(url);
       return false;
     }
@@ -157,6 +155,16 @@ export const WebViewScreen = forwardRef<WebViewScreenRef>((props, ref) => {
     return true; // Permite todas as requisições de permissão por padrão
   }, []);
 
+  // Headers customizados para enviar com as requisições da WebView
+  const customHeaders = {
+    'X-App-Platform': Platform.OS, // 'android' ou 'ios'
+    'X-App-Source': 'webview',
+    // Para o header 'Authorization', ele geralmente é gerenciado pela própria aplicação web
+    // após o login (via cookies ou localStorage). Se você precisar enviar um token nativo
+    // do React Native, você precisaria de uma lógica mais complexa para obtê-lo e passá-lo aqui.
+    // Ex: 'Authorization': 'Bearer SEU_TOKEN_NATIVO_AQUI',
+  };
+
   return (
     <SafeAreaView style={styles.flexContainer} edges={['top', 'bottom']}>
       {(loading || error || !networkStatus) && (
@@ -167,7 +175,7 @@ export const WebViewScreen = forwardRef<WebViewScreenRef>((props, ref) => {
       {/* @ts-ignore */}
       <WebView
         ref={internalWebViewRef}
-        source={{ uri: WEBVIEW_URL }}
+        source={{ uri: WEBVIEW_URL, headers: customHeaders }} // Adiciona os headers customizados
         style={styles.flexContainer}
         onLoadStart={onLoadStart}
         onLoadEnd={onLoadEnd}
@@ -186,7 +194,7 @@ export const WebViewScreen = forwardRef<WebViewScreenRef>((props, ref) => {
         allowFileAccess={true}
         allowUniversalAccessFromFileURLs={true}
         // User Agent para simular um navegador mobile, se necessário
-        // userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version=13.1.1 Mobile/15E148 Safari/604.1"
+        // userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.1 Mobile/15E148 Safari/604.1"
       />
     </SafeAreaView>
   );
