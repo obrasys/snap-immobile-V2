@@ -62,6 +62,7 @@ export const aiService = {
       const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' }); // Usando gemini-1.5-flash
       const result = await model.generateContent({
         contents: [{
+          role: 'user', // Adicionado o role
           parts: [
             { inlineData: { data: cleanBase64(base64Image), mimeType: getMimeType(base64Image) } },
             { text: prompt },
@@ -106,6 +107,7 @@ export const aiService = {
         const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
         const result = await model.generateContent({
             contents: [{
+              role: 'user', // Adicionado o role
               parts: [
                 { inlineData: { data: cleanBase64(base64Image), mimeType: getMimeType(base64Image) } },
                 { text: sys + "\n\nUser Instruction: " + prompt },
@@ -149,13 +151,14 @@ export const aiService = {
         const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
         const result = await model.generateContent({
             contents: [{
+                role: 'user', // Adicionado o role
                 parts: [
                     { inlineData: { data: cleanBase64(base64Image), mimeType: getMimeType(base64Image) } },
                     { text: "Descreva esta divisão imobiliária numa frase curta e profissional em PT-PT." }
                 ]
             }]
         });
-        return result.response.text ? result.response.text.trim() : "Imóvel";
+        return result.response.text() ? result.response.text().trim() : "Imóvel"; // Chamando .text()
     } catch (e) { 
         console.warn("[Snap AI] Falha na descrição:", e);
         return "Imóvel"; 
