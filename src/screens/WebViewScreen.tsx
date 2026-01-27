@@ -186,7 +186,7 @@ export const WebViewScreen = forwardRef<WebViewScreenRef>((props, ref) => {
         allowFileAccess={true}
         allowUniversalAccessFromFileURLs={true}
         // User Agent para simular um navegador mobile, se necessário
-        // userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.1 Mobile/15E148 Safari/604.1"
+        // userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version=13.1.1 Mobile/15E148 Safari/604.1"
       />
     </SafeAreaView>
   );
