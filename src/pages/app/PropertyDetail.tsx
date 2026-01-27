@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { CalendarDays, Camera } from "lucide-react";
 import { TopBar, IconTopButton } from "@/components/app/TopBar";
 import { Card } from "@/components/ui/card";
@@ -7,6 +7,7 @@ import { getProperty, listSessions } from "@/lib/snapdb";
 import { propertyCoverUrl } from "@/lib/images";
 
 export default function PropertyDetail() {
+  const nav = useNavigate();
   const { id } = useParams();
 
   const property = useMemo(() => (id ? getProperty(id) : null), [id]);
@@ -33,7 +34,10 @@ export default function PropertyDetail() {
           </Link>
         }
         right={
-          <IconTopButton ariaLabel="Capturar HDR" onClick={() => {}}>
+          <IconTopButton
+            ariaLabel="Abrir câmera"
+            onClick={() => nav(`/app/properties/${property.id}/camera`)}
+          >
             <Camera className="h-5 w-5 text-[hsl(var(--cta))]" />
           </IconTopButton>
         }
@@ -54,7 +58,7 @@ export default function PropertyDetail() {
         <div className="mt-2 grid gap-3">
           {sessions.length === 0 ? (
             <div className="rounded-3xl border border-primary/10 bg-secondary/40 p-5 text-sm text-muted-foreground">
-              Nenhuma sessão ainda. Em seguida, vamos adicionar a captura HDR.
+              Nenhuma sessão ainda. Toque na câmera para capturar.
             </div>
           ) : null}
 

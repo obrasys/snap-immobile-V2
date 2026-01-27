@@ -15,6 +15,7 @@ import Settings from "./pages/app/Settings";
 import PropertyDetail from "./pages/app/PropertyDetail";
 import Plan from "./pages/app/Plan";
 import Account from "./pages/app/Account";
+import CameraCapture from "./pages/app/CameraCapture";
 
 const queryClient = new QueryClient();
 
@@ -53,6 +54,14 @@ const App = () => (
               element={
                 <RequireAuth>
                   <PropertyDetail />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/app/properties/:id/camera"
+              element={
+                <RequireAuth>
+                  <CameraCapture />
                 </RequireAuth>
               }
             />
