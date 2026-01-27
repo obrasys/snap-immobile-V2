@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { Platform, BackHandler } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { WebViewScreen, WebViewScreenRef } from './src/screens/WebViewScreen'; // Importa a interface do ref
+import { WebViewScreen, WebViewScreenRef } from './screens/WebViewScreen'; // Caminho atualizado
 
 /**
  * Componente raiz do aplicativo React Native.

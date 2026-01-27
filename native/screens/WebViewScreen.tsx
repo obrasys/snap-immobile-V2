@@ -11,8 +11,8 @@ import {
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
-import { Loading } from '../components/Loading';
-import { WEBVIEW_URL } from '../services/env'; // Importa a URL da variável de ambiente
+import { Loading } from '../components/Loading'; // Caminho atualizado
+import { WEBVIEW_URL } from '../../src/services/env'; // Caminho atualizado
 
 // Domínios permitidos para navegação interna na WebView
 const ALLOWED_WEBVIEW_HOSTS = [

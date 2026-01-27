@@ -27,14 +27,12 @@
     },
 
     /* Type Roots */
-    "typeRoots": ["./node_modules/@types", "./src/types"],
-    "types": ["react-native"]
+    "typeRoots": ["./node_modules/@types", "./src/types"]
+    // Removido "types": ["react-native"] pois não é para o projeto web
   },
   "include": ["src"],
   "exclude": [
-    "NativeApp.tsx",
-    "src/components/Loading.tsx",
-    "src/screens/WebViewScreen.tsx"
+    "native" // Exclui explicitamente a nova pasta nativa
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
