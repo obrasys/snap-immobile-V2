@@ -11,7 +11,7 @@ export function TopBar({
 }) {
   return (
     <header className="sticky top-0 z-30 bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-      <div className="mx-auto flex max-w-md items-center justify-between px-4 py-3">
+      <div className="mx-auto flex w-full max-w-md items-center justify-between px-4 py-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:max-w-lg sm:px-6">
         <div className="w-12 flex items-center justify-start">{left}</div>
         <div className="text-center text-sm font-extrabold tracking-[0.22em] text-muted-foreground">
           {title}

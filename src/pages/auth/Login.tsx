@@ -51,8 +51,8 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-secondary/40 px-4 py-10">
-      <div className="mx-auto max-w-md">
+    <div className="min-h-dvh bg-secondary/40 px-4 py-10 sm:px-6 sm:py-12">
+      <div className="mx-auto w-full max-w-md sm:max-w-lg">
         <BrandMark />
 
         <div className="mt-10">
@@ -68,7 +68,7 @@ export default function Login() {
                 onClick={onGoogle}
                 disabled={loading}
                 variant="secondary"
-                className="h-11 w-full rounded-2xl justify-between"
+                className="h-11 w-full justify-between rounded-2xl"
               >
                 <span className="flex items-center gap-2">
                   <ShieldCheck className="h-4 w-4 text-primary" />

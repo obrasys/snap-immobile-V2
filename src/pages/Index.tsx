@@ -15,7 +15,7 @@ const Index = () => {
   }, [user, nav]);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background">
+    <div className="relative min-h-dvh overflow-hidden bg-background">
       <div
         className="absolute inset-0"
         style={{
@@ -27,7 +27,7 @@ const Index = () => {
       <div className="absolute inset-0 bg-primary/65" />
       <div className="absolute inset-0 bg-black/10" />
 
-      <div className="relative mx-auto flex min-h-screen max-w-md flex-col px-6 py-10">
+      <div className="relative mx-auto flex min-h-dvh w-full max-w-md flex-col px-6 py-10 sm:max-w-lg sm:px-8 sm:py-12">
         <div className="mx-auto mt-6">
           <SnapLogo size="lg" variant="white" />
         </div>

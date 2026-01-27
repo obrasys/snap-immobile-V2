@@ -47,8 +47,8 @@ export default function Settings() {
   const { logout } = useAuth();
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-md px-6 pb-10 pt-8">
+    <div className="min-h-dvh bg-background">
+      <div className="mx-auto w-full max-w-md px-6 pb-10 pt-8 sm:max-w-lg sm:px-8">
         <div className="flex items-start justify-between">
           <SnapLogo size="sm" />
           <Button
@@ -65,7 +65,7 @@ export default function Settings() {
         <div className="mt-8 space-y-2">
           <MenuRow
             icon={<Info className="h-5 w-5" />}
-            label="Politica de Privacidade"
+            label="Política de Privacidade"
             active
             onClick={() =>
               window.open(
@@ -77,7 +77,7 @@ export default function Settings() {
           />
           <MenuRow
             icon={<RefreshCcw className="h-5 w-5" />}
-            label="Sicronização"
+            label="Sincronização"
             onClick={() => showSuccess("Sincronização: em breve")}
           />
           <MenuRow
@@ -104,7 +104,7 @@ export default function Settings() {
         <div className="mt-6 space-y-2">
           <MenuRow
             icon={<Info className="h-5 w-5" />}
-            label="Politica de Privacidade"
+            label="Política de Privacidade"
             onClick={() =>
               window.open(
                 "https://snapimmobile.app/politica-privacidade/",

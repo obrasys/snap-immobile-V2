@@ -84,43 +84,55 @@ export default function NewProperty() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-dvh bg-background">
       <TopBar
         title="IMÓVEIS"
         left={
-          <IconTopButton ariaLabel="Pesquisar" onClick={() => showSuccess("Pesquisa: em breve")}>
+          <IconTopButton
+            ariaLabel="Pesquisar"
+            onClick={() => showSuccess("Pesquisa: em breve")}
+          >
             <Search className="h-5 w-5 text-[hsl(var(--cta))]" />
           </IconTopButton>
         }
         right={
-          <IconTopButton ariaLabel="Configurações" onClick={() => nav("/app/settings")}>
+          <IconTopButton
+            ariaLabel="Configurações"
+            onClick={() => nav("/app/settings")}
+          >
             <UserRoundCog className="h-5 w-5 text-[hsl(var(--cta))]" />
           </IconTopButton>
         }
       />
 
-      <main className="mx-auto max-w-md px-4 pb-6 pt-2">
-        <div className="text-xs text-muted-foreground">Apartamento 3/4 em Boa Viagem</div>
+      <main className="mx-auto w-full max-w-md px-4 pb-6 pt-2 sm:max-w-lg sm:px-6">
+        <div className="text-xs text-muted-foreground">
+          Apartamento 3/4 em Boa Viagem
+        </div>
         <div className="mt-2 overflow-hidden rounded-3xl bg-muted shadow-sm">
           <img
             alt="Imagem do imóvel"
             src={propertyCoverUrl("new-property")}
-            className="h-44 w-full object-cover"
+            className="h-44 w-full object-cover min-[420px]:h-48"
             loading="lazy"
           />
         </div>
       </main>
 
-      <section className="relative mx-auto max-w-md">
-        <div className="rounded-t-[2.25rem] bg-primary px-5 pb-7 pt-7 text-white">
-          <div className="text-2xl font-extrabold tracking-tight">Criar um novo imóvel</div>
+      <section className="relative mx-auto w-full max-w-md sm:max-w-lg">
+        <div className="rounded-t-[2.25rem] bg-primary px-5 pb-[calc(env(safe-area-inset-bottom)+1.75rem)] pt-7 text-white sm:px-6">
+          <div className="text-2xl font-extrabold tracking-tight">
+            Criar um novo imóvel
+          </div>
           <div className="mt-1 text-sm text-white/85">
             Crie um novo imóvel cada vez que começar a capturar um novo imóvel.
           </div>
 
           <form onSubmit={onSubmit} className="mt-5 space-y-4">
             <div>
-              <div className="text-xs font-semibold text-white/80">Detalhes do imóvel</div>
+              <div className="text-xs font-semibold text-white/80">
+                Detalhes do imóvel
+              </div>
               <Input
                 className={`${inputClass} mt-2`}
                 placeholder="Nome"
@@ -131,7 +143,9 @@ export default function NewProperty() {
             </div>
 
             <div className="space-y-2">
-              <div className="text-xs font-semibold text-white/80">Localização do imóvel</div>
+              <div className="text-xs font-semibold text-white/80">
+                Localização do imóvel
+              </div>
               <Input
                 className={inputClass}
                 placeholder="Nome da Rua"
@@ -139,7 +153,7 @@ export default function NewProperty() {
                 onChange={(e) => setStreet(e.target.value)}
                 required
               />
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
                 <Input
                   className={inputClass}
                   placeholder="Número"
@@ -155,7 +169,7 @@ export default function NewProperty() {
                   required
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
                 <Select value={state} onValueChange={setState}>
                   <SelectTrigger className="h-11 rounded-2xl border-white/60 bg-transparent text-white focus:ring-white/25">
                     <SelectValue placeholder="Estado" />

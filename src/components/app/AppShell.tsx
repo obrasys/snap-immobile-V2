@@ -17,9 +17,9 @@ export function AppShell({
   const { logout } = useAuth();
 
   return (
-    <div className="min-h-screen bg-secondary/40">
+    <div className="min-h-dvh bg-secondary/40">
       <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-        <div className="mx-auto flex max-w-md items-center justify-between gap-3 px-4 py-3">
+        <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3 px-4 py-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:max-w-lg sm:px-6">
           <div className="min-w-0">
             {backTo ? (
               <Link to={backTo} className="block">
@@ -46,7 +46,9 @@ export function AppShell({
         </div>
       </header>
 
-      <main className="mx-auto max-w-md px-4 pb-24 pt-4">{children}</main>
+      <main className="mx-auto w-full max-w-md px-4 pb-24 pt-4 sm:max-w-lg sm:px-6">
+        {children}
+      </main>
 
       <MobileNav />
     </div>

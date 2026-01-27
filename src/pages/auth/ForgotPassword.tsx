@@ -23,8 +23,8 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div className="min-h-screen bg-secondary/40 px-4 py-10">
-      <div className="mx-auto max-w-md">
+    <div className="min-h-dvh bg-secondary/40 px-4 py-10 sm:px-6 sm:py-12">
+      <div className="mx-auto w-full max-w-md sm:max-w-lg">
         <BrandMark />
 
         <div className="mt-10">
@@ -52,7 +52,11 @@ export default function ForgotPassword() {
                 </div>
               </div>
 
-              <Button className="h-11 w-full rounded-2xl" disabled={loading} type="submit">
+              <Button
+                className="h-11 w-full rounded-2xl"
+                disabled={loading}
+                type="submit"
+              >
                 Enviar
               </Button>
 

@@ -69,8 +69,8 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-md px-6 pb-28 pt-10">
+    <div className="min-h-dvh bg-background">
+      <div className="mx-auto w-full max-w-md px-6 pb-32 pt-10 sm:max-w-lg sm:px-8">
         <div className="flex items-center justify-between">
           <SnapLogo size="sm" />
           <Button
@@ -92,7 +92,7 @@ export default function Register() {
         </div>
 
         <div className="mt-7 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
             <Input
               className={inputClass}
               placeholder="Nome"
@@ -151,7 +151,7 @@ export default function Register() {
             required
           />
 
-          <div className="pt-2 space-y-2">
+          <div className="space-y-2 pt-2">
             <label className="flex items-start gap-2 text-xs text-muted-foreground">
               <Checkbox
                 className="mt-0.5"
@@ -195,8 +195,8 @@ export default function Register() {
         </div>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-        <div className="mx-auto flex max-w-md items-center justify-between px-6 py-4">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/90 pb-[calc(env(safe-area-inset-bottom)+1rem)] backdrop-blur supports-[backdrop-filter]:bg-background/70">
+        <div className="mx-auto flex w-full max-w-md items-center justify-between px-6 pt-4 sm:max-w-lg sm:px-8">
           <Button
             variant="ghost"
             size="icon"
