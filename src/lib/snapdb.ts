@@ -1,35 +1,49 @@
 import { startOfMonth } from "date-fns";
 import type { HDRSession, Property, User, UserPlan, UserRole } from "@/lib/models";
-import { loadJson, saveJson } from "@/lib/storage";
-
-type DbState = {
-  users: Array<User & { password?: string }>;
-  properties: Property[];
-  sessions: HDRSession[];
-  currentUserId?: string;
-};
-
-const DB_KEY = "snapimmobile.db.v1";
+import { hasSupabase, supabase } from "@/lib/supabaseClient";
+import * as local from "@/lib/snapdb.local";
 
 function nowIso() {
   return new Date().toISOString();
 }
 
-function uid() {
-  return crypto.randomUUID();
+async function getProfile(userId: string) {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, name, last_name, email, phone, cpf, company, role, plan, photo_url, created_at")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
 }
 
-function readDb(): DbState {
-  return loadJson<DbState>(DB_KEY, {
-    users: [],
-    properties: [],
-    sessions: [],
-    currentUserId: undefined,
+async function upsertProfile(input: {
+  id: string;
+  name: string;
+  lastName?: string;
+  email: string;
+  phone?: string;
+  cpf?: string;
+  company?: string;
+  role: UserRole;
+  plan: UserPlan;
+  photoUrl?: string;
+}) {
+  const { error } = await supabase.from("profiles").upsert({
+    id: input.id,
+    name: input.name,
+    last_name: input.lastName ?? "",
+    email: input.email,
+    phone: input.phone ?? "",
+    cpf: input.cpf ?? "",
+    company: input.company ?? "",
+    role: input.role,
+    plan: input.plan,
+    photo_url: input.photoUrl ?? "",
+    created_at: nowIso(),
   });
-}
-
-function writeDb(next: DbState) {
-  saveJson(DB_KEY, next);
+  if (error) throw error;
 }
 
 export const planLimits: Record<UserPlan, { hdrPerMonth: number }> = {
@@ -37,58 +51,81 @@ export const planLimits: Record<UserPlan, { hdrPerMonth: number }> = {
   pro: { hdrPerMonth: 999999 },
 };
 
-export function getCurrentUser(): User | null {
-  const db = readDb();
-  const u = db.users.find((x) => x.id === db.currentUserId);
-  if (!u) return null;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { password, ...safe } = u;
-  return safe;
-}
+export async function getCurrentUser(): Promise<User | null> {
+  if (!hasSupabase) return local.getCurrentUser();
 
-export function logout() {
-  const db = readDb();
-  writeDb({ ...db, currentUserId: undefined });
-}
+  const { data } = await supabase.auth.getUser();
+  const au = data.user;
+  if (!au) return null;
 
-export function loginWithEmail(email: string, password: string): User {
-  const db = readDb();
-  const u = db.users.find((x) => x.email.toLowerCase() === email.toLowerCase());
-  if (!u || !u.password || u.password !== password) {
-    throw new Error("E-mail ou senha inválidos");
+  const email = au.email ?? "";
+  const avatar = (au.user_metadata as Record<string, unknown> | null)?.avatar_url;
+
+  const existing = await getProfile(au.id).catch(() => null);
+  if (!existing) {
+    await upsertProfile({
+      id: au.id,
+      name: (au.user_metadata as any)?.full_name || "Usuário",
+      lastName: "",
+      email,
+      phone: "",
+      cpf: "",
+      company: "",
+      role: "corretor",
+      plan: "free",
+      photoUrl: typeof avatar === "string" ? avatar : "",
+    });
   }
-  writeDb({ ...db, currentUserId: u.id });
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { password: _p, ...safe } = u;
-  return safe;
+
+  const profile = await getProfile(au.id);
+
+  return {
+    id: au.id,
+    name: profile?.name ?? (au.user_metadata as any)?.full_name ?? "Usuário",
+    lastName: profile?.last_name ?? "",
+    email: profile?.email ?? email,
+    phone: profile?.phone ?? "",
+    cpf: profile?.cpf ?? "",
+    company: profile?.company ?? "",
+    role: (profile?.role as UserRole) ?? "corretor",
+    plan: (profile?.plan as UserPlan) ?? "free",
+    photoUrl: profile?.photo_url || (typeof avatar === "string" ? avatar : undefined),
+    createdAt: profile?.created_at ?? nowIso(),
+  };
 }
 
-export function loginWithGoogleDemo(): User {
-  const db = readDb();
-  const email = `google.user.${Math.floor(Math.random() * 10000)}@demo.com`;
-  const user: User = {
-    id: uid(),
-    name: "Conta Google (Demo)",
-    lastName: "",
-    email,
-    phone: "",
-    cpf: "",
-    company: "",
-    photoUrl: "https://api.dicebear.com/9.x/thumbs/svg?seed=SnapImmobile",
-    role: "corretor",
-    plan: "free",
-    createdAt: nowIso(),
-  };
-  const next: DbState = {
-    ...db,
-    users: [user as User & { password?: string }, ...db.users],
-    currentUserId: user.id,
-  };
-  writeDb(next);
-  return user;
+export async function logout() {
+  if (!hasSupabase) return local.logout();
+  await supabase.auth.signOut();
 }
 
-export function registerWithEmail(args: {
+export async function loginWithEmail(email: string, password: string): Promise<User> {
+  if (!hasSupabase) return local.loginWithEmail(email, password);
+
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw new Error(error.message);
+
+  const u = await getCurrentUser();
+  if (!u) throw new Error("Falha ao carregar sessão");
+  return u;
+}
+
+export async function loginWithGoogle(): Promise<void> {
+  if (!hasSupabase) {
+    // fallback: mantém demo local
+    local.loginWithGoogleDemo();
+    return;
+  }
+
+  const redirectTo = `${window.location.origin}/auth/callback`;
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo },
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function registerWithEmail(args: {
   name: string;
   lastName?: string;
   email: string;
@@ -97,122 +134,235 @@ export function registerWithEmail(args: {
   company?: string;
   password: string;
   role: UserRole;
-}): User {
-  const db = readDb();
-  const exists = db.users.some((x) => x.email.toLowerCase() === args.email.toLowerCase());
-  if (exists) throw new Error("Já existe uma conta com este e-mail");
+}): Promise<User> {
+  if (!hasSupabase) return local.registerWithEmail(args);
 
-  const user: User & { password: string } = {
-    id: uid(),
-    name: args.name.trim(),
-    lastName: args.lastName?.trim() || "",
-    email: args.email.trim().toLowerCase(),
-    phone: args.phone?.trim() || "",
-    cpf: args.cpf?.trim() || "",
-    company: args.company?.trim() || "",
+  const { data, error } = await supabase.auth.signUp({
+    email: args.email,
     password: args.password,
+    options: {
+      data: {
+        full_name: `${args.name} ${args.lastName ?? ""}`.trim(),
+      },
+    },
+  });
+  if (error) throw new Error(error.message);
+  const au = data.user;
+  if (!au) throw new Error("Cadastro criado, mas usuário não retornou");
+
+  await upsertProfile({
+    id: au.id,
+    name: args.name,
+    lastName: args.lastName ?? "",
+    email: args.email,
+    phone: args.phone ?? "",
+    cpf: args.cpf ?? "",
+    company: args.company ?? "",
     role: args.role,
     plan: "free",
-    createdAt: nowIso(),
-  };
+    photoUrl: "",
+  });
 
-  writeDb({ ...db, users: [user, ...db.users], currentUserId: user.id });
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { password, ...safe } = user;
-  return safe;
+  // Em projetos com confirmação de e-mail habilitada, a sessão pode não existir ainda.
+  const u = await getCurrentUser();
+  if (!u) {
+    // fallback: devolve o perfil (permitindo o app seguir e o usuário confirmar depois)
+    return {
+      id: au.id,
+      name: args.name,
+      lastName: args.lastName ?? "",
+      email: args.email,
+      phone: args.phone ?? "",
+      cpf: args.cpf ?? "",
+      company: args.company ?? "",
+      role: args.role,
+      plan: "free",
+      createdAt: nowIso(),
+    };
+  }
+  return u;
 }
 
-export function requestPasswordReset(_email: string) {
-  // demo: não envia e-mail; apenas simula sucesso
+export async function requestPasswordReset(email: string) {
+  if (!hasSupabase) return local.requestPasswordReset(email);
+
+  const redirectTo = `${window.location.origin}/auth/login`;
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+  if (error) throw new Error(error.message);
   return true;
 }
 
-export function listProperties(userId: string): Property[] {
-  const db = readDb();
-  return db.properties
-    .filter((p) => p.userId === userId)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+export async function listProperties(userId: string): Promise<Property[]> {
+  if (!hasSupabase) return local.listProperties(userId);
+
+  const { data, error } = await supabase
+    .from("properties")
+    .select("id, user_id, name, address, description, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return (
+    data?.map((p) => ({
+      id: p.id,
+      userId: p.user_id,
+      name: p.name,
+      address: p.address,
+      description: p.description ?? "",
+      createdAt: p.created_at,
+    })) ?? []
+  );
 }
 
-export function getProperty(propertyId: string): Property | null {
-  const db = readDb();
-  return db.properties.find((p) => p.id === propertyId) ?? null;
+export async function getProperty(propertyId: string): Promise<Property | null> {
+  if (!hasSupabase) return local.getProperty(propertyId);
+
+  const { data, error } = await supabase
+    .from("properties")
+    .select("id, user_id, name, address, description, created_at")
+    .eq("id", propertyId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    userId: data.user_id,
+    name: data.name,
+    address: data.address,
+    description: data.description ?? "",
+    createdAt: data.created_at,
+  };
 }
 
-export function createProperty(args: {
+export async function createProperty(args: {
   userId: string;
   name: string;
   address: string;
   description?: string;
-}): Property {
-  const db = readDb();
-  const p: Property = {
-    id: uid(),
-    userId: args.userId,
-    name: args.name.trim(),
-    address: args.address.trim(),
-    description: args.description?.trim() || "",
-    createdAt: nowIso(),
+}): Promise<Property> {
+  if (!hasSupabase) return local.createProperty(args);
+
+  const { data, error } = await supabase
+    .from("properties")
+    .insert({
+      user_id: args.userId,
+      name: args.name,
+      address: args.address,
+      description: args.description ?? "",
+    })
+    .select("id, user_id, name, address, description, created_at")
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  return {
+    id: data.id,
+    userId: data.user_id,
+    name: data.name,
+    address: data.address,
+    description: data.description ?? "",
+    createdAt: data.created_at,
   };
-  writeDb({ ...db, properties: [p, ...db.properties] });
-  return p;
 }
 
-export function listSessions(propertyId: string): HDRSession[] {
-  const db = readDb();
-  return db.sessions
-    .filter((s) => s.propertyId === propertyId)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+export async function listSessions(propertyId: string): Promise<HDRSession[]> {
+  if (!hasSupabase) return local.listSessions(propertyId);
+
+  const { data, error } = await supabase
+    .from("hdr_sessions")
+    .select("id, property_id, images_count, hdr_image_data_url, status, error_message, created_at")
+    .eq("property_id", propertyId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return (
+    data?.map((s) => ({
+      id: s.id,
+      propertyId: s.property_id,
+      imagesCount: s.images_count,
+      hdrImageDataUrl: s.hdr_image_data_url ?? undefined,
+      status: s.status,
+      errorMessage: s.error_message ?? undefined,
+      createdAt: s.created_at,
+    })) ?? []
+  );
 }
 
-export function canCreateHdrSession(userId: string): {
+export async function canCreateHdrSession(userId: string): Promise<{
   ok: boolean;
   usedThisMonth: number;
   limitThisMonth: number;
-} {
-  const user = readDb().users.find((u) => u.id === userId);
+}> {
+  if (!hasSupabase) return local.canCreateHdrSession(userId);
+
+  const user = await getCurrentUser();
   if (!user) return { ok: false, usedThisMonth: 0, limitThisMonth: 0 };
 
   const limitThisMonth = planLimits[user.plan].hdrPerMonth;
   const monthStart = startOfMonth(new Date()).toISOString();
 
-  const db = readDb();
-  const propertyIds = new Set(db.properties.filter((p) => p.userId === userId).map((p) => p.id));
-  const usedThisMonth = db.sessions.filter(
-    (s) => propertyIds.has(s.propertyId) && s.createdAt >= monthStart,
-  ).length;
+  const { count, error } = await supabase
+    .from("hdr_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gte("created_at", monthStart);
+
+  if (error) throw new Error(error.message);
+  const usedThisMonth = count ?? 0;
 
   return { ok: usedThisMonth < limitThisMonth, usedThisMonth, limitThisMonth };
 }
 
-export function createHdrSession(args: {
+export async function createHdrSession(args: {
+  userId: string;
   propertyId: string;
   imagesCount: number;
-}): HDRSession {
-  const db = readDb();
-  const s: HDRSession = {
-    id: uid(),
-    propertyId: args.propertyId,
-    imagesCount: args.imagesCount,
-    status: "processing",
-    createdAt: nowIso(),
+}): Promise<HDRSession> {
+  if (!hasSupabase) return local.createHdrSession({ propertyId: args.propertyId, imagesCount: args.imagesCount });
+
+  const { data, error } = await supabase
+    .from("hdr_sessions")
+    .insert({
+      user_id: args.userId,
+      property_id: args.propertyId,
+      images_count: args.imagesCount,
+      status: "processing",
+    })
+    .select("id, property_id, images_count, hdr_image_data_url, status, error_message, created_at")
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  return {
+    id: data.id,
+    propertyId: data.property_id,
+    imagesCount: data.images_count,
+    hdrImageDataUrl: data.hdr_image_data_url ?? undefined,
+    status: data.status,
+    errorMessage: data.error_message ?? undefined,
+    createdAt: data.created_at,
   };
-  writeDb({ ...db, sessions: [s, ...db.sessions] });
-  return s;
 }
 
-export function updateHdrSession(sessionId: string, patch: Partial<HDRSession>) {
-  const db = readDb();
-  writeDb({
-    ...db,
-    sessions: db.sessions.map((s) => (s.id === sessionId ? { ...s, ...patch } : s)),
-  });
+export async function updateHdrSession(sessionId: string, patch: Partial<HDRSession>) {
+  if (!hasSupabase) return local.updateHdrSession(sessionId, patch);
+
+  const mapped: Record<string, unknown> = {};
+  if (typeof patch.status !== "undefined") mapped.status = patch.status;
+  if (typeof patch.hdrImageDataUrl !== "undefined") mapped.hdr_image_data_url = patch.hdrImageDataUrl;
+  if (typeof patch.errorMessage !== "undefined") mapped.error_message = patch.errorMessage;
+
+  const { error } = await supabase.from("hdr_sessions").update(mapped).eq("id", sessionId);
+  if (error) throw new Error(error.message);
 }
 
-export function upgradePlan(userId: string, plan: UserPlan) {
-  const db = readDb();
-  writeDb({
-    ...db,
-    users: db.users.map((u) => (u.id === userId ? { ...u, plan } : u)),
-  });
+export async function upgradePlan(userId: string, plan: UserPlan) {
+  if (!hasSupabase) return local.upgradePlan(userId, plan);
+
+  const { error } = await supabase.from("profiles").update({ plan }).eq("id", userId);
+  if (error) throw new Error(error.message);
 }

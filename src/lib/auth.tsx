@@ -1,17 +1,19 @@
-import React, { createContext, useContext, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { User, UserRole } from "@/lib/models";
 import {
   getCurrentUser,
   loginWithEmail,
-  loginWithGoogleDemo,
+  loginWithGoogle,
   logout as dbLogout,
   registerWithEmail,
   requestPasswordReset,
 } from "@/lib/snapdb";
+import { hasSupabase, supabase } from "@/lib/supabaseClient";
 
 type AuthContextValue = {
   user: User | null;
-  refresh: () => void;
+  isReady: boolean;
+  refresh: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   loginGoogle: () => Promise<void>;
   register: (args: {
@@ -25,39 +27,67 @@ type AuthContextValue = {
     role: UserRole;
   }) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => getCurrentUser());
+  const [user, setUser] = useState<User | null>(null);
+  const [isReady, setIsReady] = useState(false);
+
+  async function refresh() {
+    const u = await getCurrentUser();
+    setUser(u);
+    setIsReady(true);
+  }
+
+  useEffect(() => {
+    refresh();
+
+    if (!hasSupabase) return;
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async () => {
+      await refresh();
+    });
+
+    return () => subscription.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
-      refresh: () => setUser(getCurrentUser()),
+      isReady,
+      refresh,
       login: async (email, password) => {
-        const u = loginWithEmail(email, password);
+        const u = await loginWithEmail(email, password);
         setUser(u);
+        setIsReady(true);
       },
       loginGoogle: async () => {
-        const u = loginWithGoogleDemo();
-        setUser(u);
+        await loginWithGoogle();
+        // em OAuth, a página redireciona; se estiver no modo fallback local,
+        // loginWithGoogle já cria sessão e podemos atualizar.
+        await refresh();
       },
       register: async (args) => {
-        const u = registerWithEmail(args);
+        const u = await registerWithEmail(args);
         setUser(u);
+        setIsReady(true);
       },
       resetPassword: async (email) => {
-        requestPasswordReset(email);
+        await requestPasswordReset(email);
       },
-      logout: () => {
-        dbLogout();
+      logout: async () => {
+        await dbLogout();
         setUser(null);
+        setIsReady(true);
       },
     }),
-    [user],
+    [user, isReady],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
