@@ -7,7 +7,7 @@ export function SnapLogo({
   variant?: "color" | "white";
   className?: string;
 }) {
-  const px = size === "sm" ? 56 : size === "lg" ? 192 : 96; // Aumentado de 148 para 192 (148 * 1.30)
+  const px = size === "sm" ? 56 : size === "lg" ? 307 : 96; // Aumentado de 192 para 307 (192 * 1.60)
 
   const PURPLE = "#6d37a6";
   const ORANGE = "#ff4900";
