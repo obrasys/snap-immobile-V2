@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+"use client";
+
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Camera, Plus, Search, UserRoundCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,6 +11,7 @@ import { propertyCoverUrl } from "@/lib/images";
 import { TopBar, IconTopButton } from "@/components/app/TopBar";
 import { showSuccess } from "@/utils/toast";
 import { CreatePropertyDrawer } from "@/components/app/CreatePropertyDrawer";
+import type { Property } from "@/lib/models";
 
 export default function Properties({
   openCreateOnMount = false,
@@ -19,7 +22,8 @@ export default function Properties({
   const nav = useNavigate();
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [loadingProperties, setLoadingProperties] = useState(true);
 
   useEffect(() => {
     if (openCreateOnMount) {
@@ -29,10 +33,27 @@ export default function Properties({
     }
   }, [openCreateOnMount, nav]);
 
-  const properties = useMemo(() => {
-    if (!user) return [];
-    return listProperties(user.id);
-  }, [user, refreshKey]);
+  useEffect(() => {
+    async function fetchProperties() {
+      if (!user) {
+        setProperties([]);
+        setLoadingProperties(false);
+        return;
+      }
+      setLoadingProperties(true);
+      try {
+        const fetchedProperties = await listProperties(user.id);
+        setProperties(fetchedProperties);
+      } catch (error) {
+        console.error("Failed to fetch properties:", error);
+        showError("Falha ao carregar imóveis.");
+        setProperties([]);
+      } finally {
+        setLoadingProperties(false);
+      }
+    }
+    fetchProperties();
+  }, [user, createOpen]); // Re-fetch when user changes or a new property is created
 
   return (
     <div className="min-h-dvh bg-background">
@@ -66,7 +87,11 @@ export default function Properties({
           </Button>
         </div>
 
-        {properties.length === 0 ? (
+        {loadingProperties ? (
+          <div className="mt-4 rounded-3xl border border-primary/10 bg-secondary/40 p-5 text-sm text-muted-foreground">
+            Carregando imóveis...
+          </div>
+        ) : properties.length === 0 ? (
           <div className="mt-4 rounded-3xl border border-primary/10 bg-secondary/40 p-5">
             <div className="text-base font-extrabold tracking-tight">
               Nenhum imóvel ainda
@@ -75,25 +100,25 @@ export default function Properties({
               Toque em "Criar um imóvel" (ou no botão da câmera) para começar.
             </div>
           </div>
-        ) : null}
-
-        <div className="mt-5 grid gap-5">
-          {properties.map((p) => (
-            <div key={p.id} className="space-y-2">
-              <div className="text-xs text-muted-foreground">{p.name}</div>
-              <Link to={`/app/properties/${p.id}`} className="block">
-                <Card className="overflow-hidden rounded-3xl border-0 bg-muted shadow-sm">
-                  <img
-                    alt={p.name}
-                    src={propertyCoverUrl(p.id)}
-                    className="h-44 w-full object-cover min-[420px]:h-48"
-                    loading="lazy"
-                  />
-                </Card>
-              </Link>
-            </div>
-          ))}
-        </div>
+        ) : (
+          <div className="mt-5 grid gap-5">
+            {properties.map((p) => (
+              <div key={p.id} className="space-y-2">
+                <div className="text-xs text-muted-foreground">{p.name}</div>
+                <Link to={`/app/properties/${p.id}`} className="block">
+                  <Card className="overflow-hidden rounded-3xl border-0 bg-muted shadow-sm">
+                    <img
+                      alt={p.name}
+                      src={propertyCoverUrl(p.id)}
+                      className="h-44 w-full object-cover min-[420px]:h-48"
+                      loading="lazy"
+                    />
+                  </Card>
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
       </main>
 
       <button
@@ -110,7 +135,7 @@ export default function Properties({
           open={createOpen}
           onOpenChange={setCreateOpen}
           userId={user.id}
-          onCreated={() => setRefreshKey((x) => x + 1)}
+          onCreated={() => setCreateOpen(false)} // Close drawer and trigger re-fetch
         />
       ) : null}
     </div>
