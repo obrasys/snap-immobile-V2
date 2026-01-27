@@ -24,20 +24,22 @@ const Index = () => {
           backgroundPosition: "center",
         }}
       />
-      <div className="absolute inset-0 bg-primary/80" />
-      <div className="absolute inset-0 bg-black/25" />
+      {/* Ajustado o overlay para um roxo mais intenso e adicionado um preto para profundidade */}
+      <div className="absolute inset-0 bg-primary/90" />
+      <div className="absolute inset-0 bg-black/40" />
 
       <div className="relative mx-auto flex min-h-dvh w-full max-w-md flex-col px-6 py-10 sm:max-w-lg sm:px-8 sm:py-12">
-        <div className="mx-auto mt-10"> {/* Ajustado o espaçamento superior */}
+        {/* Logo posicionado mais acima */}
+        <div className="mx-auto mt-16"> 
           <SnapLogo size="lg" variant="white" />
         </div>
 
         <div className="mt-auto pb-6">
           <div className="text-center">
-            <div className="text-3xl font-extrabold tracking-tight text-white"> {/* Ajustado tamanho e cor */}
+            <div className="text-3xl font-extrabold tracking-tight text-white">
               AUMENTE A SUA VISIBILIDADE
             </div>
-            <p className="mx-auto mt-2 max-w-sm text-base leading-relaxed text-white"> {/* Ajustado tamanho e cor */}
+            <p className="mx-auto mt-2 max-w-sm text-base leading-relaxed text-white">
               Captação profissional fácil, com qualidade visual através do seu
               smartphone.
             </p>
@@ -47,12 +49,14 @@ const Index = () => {
             <Button
               asChild
               variant="outline"
-              className="h-12 w-full rounded-full border-white/70 bg-transparent text-white hover:bg-white/10 hover:text-white"
+              // Estilização do botão de login ajustada para corresponder à imagem
+              className="h-12 w-full rounded-full border-2 border-white/20 bg-white/5 text-white hover:bg-white/10 hover:text-white"
             >
               <Link to="/auth/login">JÁ TEM CONTA? ENTRE AQUI</Link>
             </Button>
 
             <div className="flex items-center justify-center gap-4">
+              {/* Separador ajustado para ser mais visível */}
               <Separator className="h-px w-auto flex-1 bg-white/35" />
               <div className="text-xs font-bold tracking-widest text-white/80">
                 OU
