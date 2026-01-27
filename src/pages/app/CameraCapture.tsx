@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner"; // Usando sonner para consistência
 import { useOrientationAngle } from "@/hooks/use-orientation-angle";
 import { Icons } from "@/components/app/Icons";
-import { geminiService } from "@/services/geminiService";
+import { aiService } from "@/services/aiService"; // Importando o novo aiService
 import { bracketStorage } from "@/lib/bracketStorage";
 import { createHdrSession, updateHdrSession } from "@/lib/snapdb";
 import { useAuth } from "@/lib/auth";
@@ -209,10 +209,10 @@ export default function CameraCapture() {
   );
 
   const processHDRInBackground = useCallback(
-    async (photoId: string, bracketIds: string[], mode: PhotoMode) => {
+    async (photoId: string, bracketIds: string[], mode: PhotoMode, base64Image: string) => {
       if (!user?.id || !propertyId) return;
       try {
-        const final = await geminiService.enhanceBrackets(bracketIds, mode, { scene: sceneMode });
+        const final = await aiService.enhanceBrackets(bracketIds, mode, { scene: sceneMode }, base64Image); // Usando aiService
         await onSmartSave(final, mode, photoId);
       } catch (e) {
         console.error("HDR processing failed:", e);
@@ -225,7 +225,7 @@ export default function CameraCapture() {
     [propertyId, sceneMode, user?.id, onSmartSave]
   );
 
-  const captureFrame = async (): Promise<Blob | null> => {
+  const captureFrame = async (): Promise<string | null> => { // Retorna data URL
     const video = videoRef.current;
     if (!video) return null;
     
@@ -256,7 +256,7 @@ export default function CameraCapture() {
     }
 
     ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
-    return new Promise(r => canvas.toBlob(r, "image/jpeg", 0.95));
+    return canvas.toDataURL("image/jpeg", 0.95); // Retorna data URL
   };
 
   const runHDR = async () => {
@@ -264,6 +264,7 @@ export default function CameraCapture() {
 
     setProcessing("A CAPTURAR...");
     const ids: string[] = [];
+    let capturedBase64Image: string | null = null; // Para armazenar a imagem capturada para o Gemini
 
     try {
       const video = videoRef.current;
@@ -275,11 +276,10 @@ export default function CameraCapture() {
       const supportsExposure = capabilities.exposureCompensation || capabilities.exposureMode;
 
       if (!supportsExposure) {
-        const blob = await captureFrame();
-        if (blob) {
-            const previewUrl = URL.createObjectURL(blob);
+        const dataUrl = await captureFrame();
+        if (dataUrl) {
             const mode = sceneMode === "exterior" ? "hp_hdr_exterior" : "hp_hdr_window";
-            await onSmartSave(previewUrl, mode);
+            await onSmartSave(dataUrl, mode);
             toast.success("Foto guardada!");
             navigate(-1); // Go back after single capture
         }
@@ -303,11 +303,15 @@ export default function CameraCapture() {
             continue;
         }
 
-        const blob = await captureFrame();
-        if (blob) {
+        const dataUrl = await captureFrame();
+        if (dataUrl) {
             const id = `bracket_${Date.now()}_${i}`;
+            const blob = await dataUrlToBlob(dataUrl); // Converte para Blob para salvar no localStorage
             await bracketStorage.saveBracket(id, blob);
             ids.push(id);
+            if (i === Math.floor(EV_STEPS.length / 2)) {
+              capturedBase64Image = dataUrl; // Salva a imagem do meio para enviar ao Gemini
+            }
         }
       }
 
@@ -315,6 +319,7 @@ export default function CameraCapture() {
       try { await track.applyConstraints({ advanced: [{ exposureCompensation: 0 }] } as any); } catch {}
 
       if (ids.length === 0) throw new Error("Nenhum frame capturado");
+      if (!capturedBase64Image) throw new Error("Imagem para processamento HDR não capturada.");
       
       const midId = ids[Math.floor(ids.length / 2)];
       const previewBlob = await bracketStorage.getBracket(midId);
@@ -325,7 +330,7 @@ export default function CameraCapture() {
         await onSmartSave(previewUrl, mode, photoId); // Save preview and mark as processing
         
         toast.success("Foto guardada! A processar HDR...");
-        processHDRInBackground(photoId, [...ids], mode);
+        processHDRInBackground(photoId, [...ids], mode, capturedBase64Image); // Passa a imagem base64
         navigate(-1); // Go back after starting HDR processing
       }
     } catch (e) {
