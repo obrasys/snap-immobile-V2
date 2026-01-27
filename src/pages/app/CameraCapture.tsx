@@ -19,7 +19,7 @@ function cx(...classes: Array<string | false | undefined | null>) {
 export default function CameraCapture() {
   const nav = useNavigate();
   const { id } = useParams();
-  const { angle } = useOrientationAngle();
+  const { angle, isLandscape } = useOrientationAngle(); // Obter isLandscape
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -77,13 +77,38 @@ export default function CameraCapture() {
     const doShot = () => {
       const v = videoRef.current!;
       const canvas = document.createElement("canvas");
-      const w = v.videoWidth || 1280;
-      const h = v.videoHeight || 720;
-      canvas.width = w;
-      canvas.height = h;
+      
+      // Ajustar as dimensões do canvas para a proporção 4:3
+      const videoWidth = v.videoWidth;
+      const videoHeight = v.videoHeight;
+      const targetAspectRatio = 4 / 3; // Proporção desejada (largura/altura)
+
+      let drawWidth = videoWidth;
+      let drawHeight = videoHeight;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      const currentVideoAspectRatio = videoWidth / videoHeight;
+
+      if (currentVideoAspectRatio > targetAspectRatio) {
+        // O vídeo é mais largo que 4:3, cortar horizontalmente
+        drawWidth = videoHeight * targetAspectRatio;
+        offsetX = (videoWidth - drawWidth) / 2;
+      } else {
+        // O vídeo é mais alto que 4:3, cortar verticalmente
+        drawHeight = videoWidth / targetAspectRatio;
+        offsetY = (videoHeight - drawHeight) / 2;
+      }
+
+      canvas.width = drawWidth;
+      canvas.height = drawHeight;
+
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      ctx.drawImage(v, 0, 0, w, h);
+      
+      // Desenhar a imagem cortada no canvas
+      ctx.drawImage(v, offsetX, offsetY, drawWidth, drawHeight, 0, 0, canvas.width, canvas.height);
+      
       const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
       showSuccess(
         `Foto capturada${id ? ` (imóvel ${id.slice(0, 6)}…)` : ""} — demo`,
@@ -103,23 +128,26 @@ export default function CameraCapture() {
 
   return (
     <div className="fixed inset-0 z-50 bg-black">
-      {/* Preview */}
-      <div className="absolute inset-0">
-        <video
-          ref={videoRef}
-          playsInline
-          muted
-          className={cx(
-            "h-full w-full object-cover",
-            zoom === 0.5 && "scale-[0.92]",
-          )}
-        />
-        {/* overlay shading */}
-        <div className="absolute inset-0 bg-black/10" />
+      {/* Preview Container - agora centralizado e com proporção 4:3 */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className={cx(
+          "relative h-full w-auto overflow-hidden", // Este div conterá o vídeo e as sobreposições, limitado pela proporção
+          isLandscape ? "aspect-[4/3]" : "aspect-[3/4]", // Proporção dinâmica
+        )}>
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            className={cx(
+              "absolute inset-0 h-full w-full object-cover", // O vídeo preenche seu pai (o div com aspect-ratio)
+              zoom === 0.5 && "scale-[0.92]",
+            )}
+          />
+          {/* overlay shading */}
+          <div className="absolute inset-0 bg-black/10" />
 
-        {/* grid */}
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute inset-0 grid grid-cols-3 grid-rows-3">
+          {/* grid */}
+          <div className="pointer-events-none absolute inset-0 grid grid-cols-3 grid-rows-3">
             {Array.from({ length: 9 }).map((_, i) => (
               <div
                 // eslint-disable-next-line react/no-array-index-key
@@ -130,12 +158,28 @@ export default function CameraCapture() {
           </div>
 
           {/* crosshair */}
-          <div className="absolute left-1/2 top-1/2 h-[38vh] w-[2px] -translate-x-1/2 -translate-y-1/2 bg-red-500/90" />
-          <div className="absolute left-1/2 top-1/2 h-[2px] w-[38vw] -translate-x-1/2 -translate-y-1/2 bg-emerald-400/90" />
+          {/* As linhas de mira agora estão centralizadas dentro do contêiner de proporção */}
+          <div className="absolute left-1/2 top-1/2 h-[38%] w-[2px] -translate-x-1/2 -translate-y-1/2 bg-red-500/90" />
+          <div className="absolute left-1/2 top-1/2 h-[2px] w-[38%] -translate-x-1/2 -translate-y-1/2 bg-emerald-400/90" />
         </div>
       </div>
 
-      {/* Right rail (controls). Everything rotates with orientation. */}
+      {/* Botão de Disparo - movido para fora da barra lateral direita, centralizado verticalmente */}
+      <button
+        disabled={!ready}
+        onClick={capture}
+        className={cx(
+          "fixed right-[calc(env(safe-area-inset-right)+104px+20px)] top-1/2 -translate-y-1/2 z-50 grid h-20 w-20 place-items-center rounded-full",
+          ready ? "opacity-100" : "opacity-60",
+        )}
+        aria-label="Capturar"
+        // O botão de disparo não gira, apenas os controles dentro da barra lateral
+      >
+        <div className="absolute inset-0 rounded-full border-4 border-white/90" />
+        <div className="h-16 w-16 rounded-full bg-white" />
+      </button>
+
+      {/* Right rail (controls). Tudo gira com a orientação. */}
       <div className="absolute right-0 top-0 h-full w-[104px] bg-black/80 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
         <div className="relative flex h-full flex-col items-center justify-between px-3 py-6">
           <div
@@ -207,20 +251,6 @@ export default function CameraCapture() {
             className="flex flex-col items-center gap-6"
             style={{ transform: uiRotate, transition: "transform 220ms ease" }}
           >
-            {/* shutter */}
-            <button
-              disabled={!ready}
-              onClick={capture}
-              className={cx(
-                "relative grid h-20 w-20 place-items-center rounded-full",
-                ready ? "opacity-100" : "opacity-60",
-              )}
-              aria-label="Capturar"
-            >
-              <div className="absolute inset-0 rounded-full border-4 border-white/90" />
-              <div className="h-16 w-16 rounded-full bg-white" />
-            </button>
-
             <button
               className="flex items-center gap-2 rounded-2xl px-3 py-2 text-white/90 hover:bg-white/10"
               onClick={() => setTimerSec((t) => (t === 1 ? 0 : 1))}
