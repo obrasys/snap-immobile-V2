@@ -11,7 +11,6 @@ import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import Properties from "./pages/app/Properties";
-import NewProperty from "./pages/app/NewProperty";
 import Settings from "./pages/app/Settings";
 import PropertyDetail from "./pages/app/PropertyDetail";
 import Plan from "./pages/app/Plan";
@@ -45,7 +44,7 @@ const App = () => (
               path="/app/properties/new"
               element={
                 <RequireAuth>
-                  <NewProperty />
+                  <Properties openCreateOnMount />
                 </RequireAuth>
               }
             />

@@ -1,21 +1,38 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Camera, Search, UserRoundCog } from "lucide-react";
+import { Camera, Plus, Search, UserRoundCog } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
 import { listProperties } from "@/lib/snapdb";
 import { propertyCoverUrl } from "@/lib/images";
 import { TopBar, IconTopButton } from "@/components/app/TopBar";
 import { showSuccess } from "@/utils/toast";
+import { CreatePropertyDrawer } from "@/components/app/CreatePropertyDrawer";
 
-export default function Properties() {
+export default function Properties({
+  openCreateOnMount = false,
+}: {
+  openCreateOnMount?: boolean;
+}) {
   const { user } = useAuth();
   const nav = useNavigate();
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (openCreateOnMount) {
+      setCreateOpen(true);
+      // mantém comportamento de rota antiga, mas já volta para a listagem
+      nav("/app/properties", { replace: true });
+    }
+  }, [openCreateOnMount, nav]);
 
   const properties = useMemo(() => {
     if (!user) return [];
     return listProperties(user.id);
-  }, [user]);
+  }, [user, refreshKey]);
 
   return (
     <div className="min-h-dvh bg-background">
@@ -40,18 +57,27 @@ export default function Properties() {
       />
 
       <main className="mx-auto w-full max-w-md px-4 pb-28 pt-2 sm:max-w-lg sm:px-6">
+        <div className="mt-3">
+          <Button
+            onClick={() => setCreateOpen(true)}
+            className="h-11 w-full rounded-2xl bg-primary text-white hover:bg-primary/90"
+          >
+            <Plus className="mr-2 h-4 w-4" /> Criar um imóvel
+          </Button>
+        </div>
+
         {properties.length === 0 ? (
           <div className="mt-4 rounded-3xl border border-primary/10 bg-secondary/40 p-5">
             <div className="text-base font-extrabold tracking-tight">
               Nenhum imóvel ainda
             </div>
             <div className="mt-1 text-sm text-muted-foreground">
-              Toque no botão da câmera para criar o seu primeiro imóvel.
+              Toque em "Criar um imóvel" (ou no botão da câmera) para começar.
             </div>
           </div>
         ) : null}
 
-        <div className="mt-3 grid gap-5">
+        <div className="mt-5 grid gap-5">
           {properties.map((p) => (
             <div key={p.id} className="space-y-2">
               <div className="text-xs text-muted-foreground">{p.name}</div>
@@ -73,11 +99,20 @@ export default function Properties() {
       <button
         className="fixed left-1/2 z-40 grid h-14 w-14 -translate-x-1/2 place-items-center rounded-full bg-[hsl(var(--cta))] text-white shadow-lg shadow-[hsl(var(--cta))]/25 active:scale-[0.98]"
         style={{ bottom: "calc(env(safe-area-inset-bottom) + 2rem)" }}
-        onClick={() => nav("/app/properties/new")}
+        onClick={() => setCreateOpen(true)}
         aria-label="Criar imóvel"
       >
         <Camera className="h-6 w-6" />
       </button>
+
+      {user ? (
+        <CreatePropertyDrawer
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          userId={user.id}
+          onCreated={() => setRefreshKey((x) => x + 1)}
+        />
+      ) : null}
     </div>
   );
 }
