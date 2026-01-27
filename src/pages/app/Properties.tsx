@@ -9,7 +9,7 @@ import { useAuth } from "@/lib/auth";
 import { listProperties } from "@/lib/snapdb";
 import { propertyCoverUrl } from "@/lib/images";
 import { TopBar, IconTopButton } from "@/components/app/TopBar";
-import { showSuccess } from "@/utils/toast";
+import { showError, showSuccess } from "@/utils/toast"; // Added showError import
 import { CreatePropertyDrawer } from "@/components/app/CreatePropertyDrawer";
 import type { Property } from "@/lib/models";
 
