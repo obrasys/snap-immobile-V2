@@ -7,7 +7,7 @@ import { WebViewScreen, WebViewScreenRef } from './src/screens/WebViewScreen'; /
  * Componente raiz do aplicativo React Native.
  * Configura o provedor de área segura e lida com o botão de voltar do Android.
  */
-const App = () => {
+const NativeApp = () => {
   // Usamos um ref para acessar os métodos da WebViewScreen
   const webViewScreenRef = useRef<WebViewScreenRef>(null);
 
@@ -40,4 +40,4 @@ const App = () => {
   );
 };
 
-export default App;
+export default NativeApp;
