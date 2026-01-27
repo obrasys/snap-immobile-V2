@@ -209,7 +209,12 @@ export default function CameraCapture() {
   );
 
   const processHDRInBackground = useCallback(
-    async (photoId: string, bracketIds: string[], mode: PhotoMode, base64Image: string) => {
+    async (
+      photoId: string,
+      bracketIds: string[],
+      mode: "hp_hdr_exterior" | "hp_hdr_window", // Narrowing the type here
+      base64Image: string
+    ) => {
       if (!user?.id || !propertyId) return;
       try {
         const final = await aiService.enhanceBrackets(bracketIds, mode, { scene: sceneMode }, base64Image); // Usando aiService
