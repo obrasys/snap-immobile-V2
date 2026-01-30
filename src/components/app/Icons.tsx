@@ -7,6 +7,7 @@ import {
   Minus,
   Plus,
   Aperture,
+  Camera, // Adicionado o ícone Camera
 } from "lucide-react";
 
 export const Icons = {
@@ -18,4 +19,5 @@ export const Icons = {
   Minus: Minus,
   Plus: Plus,
   Aperture: Aperture,
+  Camera: Camera, // Adicionado o ícone Camera
 };
