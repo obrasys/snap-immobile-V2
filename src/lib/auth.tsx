@@ -8,8 +8,8 @@ import {
   registerWithEmail,
   requestPasswordReset,
 } from "@/lib/snapdb";
-import { supabase } from "@/integrations/supabase/client"; // Import atualizado
-import { hasSupabase } from "@/integrations/supabase/client"; // Import atualizado
+import { supabase } from "@/integrations/supabase/client";
+import { hasSupabase } from "@/integrations/supabase/client";
 
 type AuthContextValue = {
   user: User | null;
@@ -38,9 +38,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isReady, setIsReady] = useState(false);
 
   async function refresh() {
+    console.log("[AuthContext] Refreshing user...");
     const u = await getCurrentUser();
     setUser(u);
     setIsReady(true);
+    console.log("[AuthContext] User after refresh:", u ? u.email : "null");
   }
 
   useEffect(() => {
@@ -50,7 +52,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async () => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("[AuthContext] Auth state changed:", event, session?.user?.email);
       await refresh();
     });
 
@@ -64,28 +67,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isReady,
       refresh,
       login: async (email, password) => {
-        const u = await loginWithEmail(email, password);
-        setUser(u);
-        setIsReady(true);
+        console.log("[AuthContext] Attempting login...");
+        await loginWithEmail(email, password);
+        await refresh();
+        console.log("[AuthContext] Login process completed.");
       },
       loginGoogle: async () => {
+        console.log("[AuthContext] Attempting Google login...");
         await loginWithGoogle();
-        // em OAuth, a página redireciona; se estiver no modo fallback local,
-        // loginWithGoogle já cria sessão e podemos atualizar.
         await refresh();
+        console.log("[AuthContext] Google login process completed.");
       },
       register: async (args) => {
-        const u = await registerWithEmail(args);
-        setUser(u);
-        setIsReady(true);
+        console.log("[AuthContext] Attempting registration...");
+        await registerWithEmail(args);
+        await refresh();
+        console.log("[AuthContext] Registration process completed.");
       },
       resetPassword: async (email) => {
+        console.log("[AuthContext] Attempting password reset...");
         await requestPasswordReset(email);
+        console.log("[AuthContext] Password reset process completed.");
       },
       logout: async () => {
-        await logout(); // Chama o logout do snapdb, que agora é Supabase
+        console.log("[AuthContext] Attempting logout...");
+        await logout();
         setUser(null);
         setIsReady(true);
+        console.log("[AuthContext] Logout process completed.");
       },
     }),
     [user, isReady],
