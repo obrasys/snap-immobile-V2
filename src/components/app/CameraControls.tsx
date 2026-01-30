@@ -125,9 +125,8 @@ export function CameraControls({
           className={`text-white/40 active:text-primary transition-colors p-2 ${
             showGrid ? "text-primary" : ""
           }`}
-          style={uiRotateStyle}
         >
-          <Icons.Grid className="w-6 h-6" />
+          <Icons.Grid className="w-6 h-6" style={uiRotateStyle} /> {/* Aplicado uiRotateStyle ao ícone */}
         </button>
 
         {/* Middle section: Capture button and Zoom presets */}
@@ -136,13 +135,13 @@ export function CameraControls({
           {!isDisabled && (
             <div
               className="flex flex-col items-center gap-2 z-20"
-              style={uiRotateStyle}
             >
               <button
                 onClick={() => handleZoomPreset(1.0)}
                 className={`flex items-center justify-center w-8 h-8 rounded-full text-[9px] font-black transition-all ${
                   zoomPreset === 1.0 ? "bg-primary text-white scale-125" : "text-white/60"
                 }`}
+                style={uiRotateStyle} {/* Aplicado uiRotateStyle ao botão */}
               >
                 1x
               </button>
@@ -151,6 +150,7 @@ export function CameraControls({
                 className={`flex items-center justify-center w-8 h-8 rounded-full text-[9px] font-black transition-all ${
                   zoomPreset === 0.5 ? "bg-primary text-white scale-125" : "text-white/60"
                 }`}
+                style={uiRotateStyle} {/* Aplicado uiRotateStyle ao botão */}
               >
                 .5
               </button>
@@ -162,7 +162,7 @@ export function CameraControls({
             onClick={handleMainCapture}
             disabled={isDisabled}
             className="w-20 h-20 rounded-full border-4 border-white/20 p-1 active:scale-90 transition-all flex items-center justify-center"
-            style={uiRotateStyle}
+            style={uiRotateStyle} {/* Mantido uiRotateStyle no botão principal */}
           >
             <div
               className={`w-full h-full rounded-full ${
@@ -179,21 +179,19 @@ export function CameraControls({
             onClick={() => setCaptureMode((prev) => (prev === "single" ? "hdr" : "single"))}
             disabled={isDisabled || isHdrDisabled} // Disable if HDR is not supported
             className={`text-white/40 hover:text-white p-2 ${isHdrDisabled ? "opacity-30 cursor-not-allowed" : ""}`}
-            style={uiRotateStyle}
           >
             {captureMode === "single" ? (
-              <Icons.Camera className="w-7 h-7" />
+              <Icons.Camera className="w-7 h-7" style={uiRotateStyle} /> {/* Aplicado uiRotateStyle ao ícone */}
             ) : (
-              <Icons.Aperture className="w-7 h-7" />
+              <Icons.Aperture className="w-7 h-7" style={uiRotateStyle} /> {/* Aplicado uiRotateStyle ao ícone */}
             )}
           </button>
 
           <button
             onClick={() => navigate(-1)}
             className="text-white/40 hover:text-white p-2"
-            style={uiRotateStyle}
           >
-            <Icons.X className="w-7 h-7" />
+            <Icons.X className="w-7 h-7" style={uiRotateStyle} /> {/* Aplicado uiRotateStyle ao ícone */}
           </button>
         </div>
       </div>

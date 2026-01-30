@@ -84,7 +84,7 @@ export function useCamera() {
 
       if (deviceId) {
         delete baseVideo.facingMode;
-        baseVideo.deviceId = { exact: deviceId };
+        baseVideo.deviceId = deviceId; // Alterado de { exact: deviceId } para deviceId (ideal)
       }
 
       try {
