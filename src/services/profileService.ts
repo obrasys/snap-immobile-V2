@@ -35,7 +35,7 @@ export async function upsertProfile(input: {
   plan: UserPlan;
   avatarUrl?: string;
 }) {
-  console.log("[profileService] Upserting profile for user:", input.id);
+  console.log("[profileService] Upserting profile for user:", input.id, "with data:", input);
   const { error } = await supabase.from("profiles").upsert({
     id: input.id,
     first_name: input.firstName,

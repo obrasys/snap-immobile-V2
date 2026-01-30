@@ -28,6 +28,7 @@ export async function getCurrentUser(): Promise<User | null> {
   let profileData = null;
   try {
     profileData = await getProfile(au.id);
+    console.log("[authService] Initial profileData from getProfile:", profileData);
   } catch (e) {
     console.warn("[authService] Initial profile fetch failed, attempting upsert:", e);
   }
@@ -35,7 +36,7 @@ export async function getCurrentUser(): Promise<User | null> {
   if (!profileData) {
     console.log("[authService] Profile not found, attempting to upsert for user:", au.id);
     try {
-      await upsertProfile({
+      const profileToUpsert = {
         id: au.id,
         firstName: (au.user_metadata as any)?.first_name || "Usuário",
         lastName: (au.user_metadata as any)?.last_name || "",
@@ -46,9 +47,12 @@ export async function getCurrentUser(): Promise<User | null> {
         role: "corretor",
         plan: "free",
         avatarUrl: typeof avatar === "string" ? avatar : "",
-      });
+      };
+      console.log("[authService] Upserting profile with data:", profileToUpsert);
+      await upsertProfile(profileToUpsert);
       console.log("[authService] Profile upserted successfully for user:", au.id);
       profileData = await getProfile(au.id); // Fetch again to get the complete profile data
+      console.log("[authService] ProfileData after upsert and re-fetch:", profileData);
     } catch (e) {
       console.error("[authService] Failed to upsert or fetch profile after upsert:", e);
       throw new Error("Falha ao carregar perfil do usuário após criação/atualização.");
