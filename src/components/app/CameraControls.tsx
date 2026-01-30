@@ -51,7 +51,7 @@ export function CameraControls({
   const isHdrDisabled = !supportsExposureCompensation; // Determine if HDR should be disabled
 
   return (
-    <>
+    <React.Fragment>
       {/* Scene Mode (right-center, rotating) */}
       {!isDisabled && (
         <div
@@ -195,6 +195,6 @@ export function CameraControls({
           </button>
         </div>
       </div>
-    </>
+    </React.Fragment>
   );
 }
