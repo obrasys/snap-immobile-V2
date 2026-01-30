@@ -7,7 +7,7 @@ import {
   logout,
   registerWithEmail,
   requestPasswordReset,
-} from "@/services/authService"; // Updated import
+} from "@/services/authService";
 import { supabase } from "@/integrations/supabase/client";
 import { hasSupabase } from "@/integrations/supabase/client";
 
@@ -41,25 +41,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log("[AuthContext] Refreshing user...");
     const u = await getCurrentUser();
     setUser(u);
-    setIsReady(true);
     console.log("[AuthContext] User after refresh:", u ? u.email : "null");
   }
 
   useEffect(() => {
-    refresh();
-
-    if (!hasSupabase) return;
+    if (!hasSupabase) {
+      console.warn("[AuthContext] Supabase not configured. Auth will not function.");
+      setIsReady(true); // Mark as ready even without Supabase to avoid blocking the app
+      return;
+    }
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log("[AuthContext] Auth state changed:", event, session?.user?.email);
-      await refresh();
+      if (event === 'INITIAL_SESSION') {
+        // Only set initial user and ready state after Supabase has checked for a session
+        await refresh();
+        setIsReady(true);
+      } else if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+        await refresh();
+      }
     });
 
     return () => subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // Empty dependency array to run only once on mount
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -75,8 +82,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loginGoogle: async () => {
         console.log("[AuthContext] Attempting Google login...");
         await loginWithGoogle();
-        await refresh();
-        console.log("[AuthContext] Google login process completed.");
+        // Google login initiates a redirect, so refresh will happen on callback page
+        console.log("[AuthContext] Google login process initiated (redirecting).");
       },
       register: async (args) => {
         console.log("[AuthContext] Attempting registration...");
@@ -93,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log("[AuthContext] Attempting logout...");
         await logout();
         setUser(null);
-        setIsReady(true);
+        // No need to setIsReady(true) here, as it's already true and handled by onAuthStateChange
         console.log("[AuthContext] Logout process completed.");
       },
     }),

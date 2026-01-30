@@ -2,7 +2,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = "https://coqaiwjpmgfkonlymtbg.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvcWFpd2pwbWdma29ubHltdGJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3ODQ2NTUsImV4cCI6MjA4NTM2MDY1NX0.nf_jqP2vXy1rIbq5d_o1CpmEe4emwSBh7yzfZmKFguw";
+const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvcWFpd2jwbWdma29ubHltdGJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3ODQ2NTUsImV4cCI6MjA4NTM2MDY1NX0.nf_jqP2vXy1rIbq5d_o1CpmEe4emw";
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
@@ -10,3 +10,7 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 export const hasSupabase = !!SUPABASE_URL && !!SUPABASE_PUBLISHABLE_KEY;
+
+console.log("[SupabaseClient] SUPABASE_URL:", SUPABASE_URL ? "Configured" : "Not Configured");
+console.log("[SupabaseClient] SUPABASE_PUBLISHABLE_KEY:", SUPABASE_PUBLISHABLE_KEY ? "Configured" : "Not Configured");
+console.log("[SupabaseClient] hasSupabase:", hasSupabase);
