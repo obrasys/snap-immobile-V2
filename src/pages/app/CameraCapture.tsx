@@ -9,7 +9,7 @@ import { createHdrSession, updateHdrSession } from "@/lib/snapdb";
 import { useAuth } from "@/lib/auth";
 import type { PhotoMode } from "@/lib/models";
 
-const EV_STEPS = [-3, -2, -1, 0, 1, 2, 3];
+const EV_STEPS = [-4, -3, -2, -1, 0, 1, 2, 3, 4]; // Atualizado para 9 exposições
 const SHUTTER_SOUND =
   "data:audio/mp3;base64,//uQZAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//sQxAADgnABuQAAAgAEAAP//wAABAAEAAA=";
 
