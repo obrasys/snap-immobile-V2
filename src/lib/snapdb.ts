@@ -2,7 +2,8 @@ import { startOfMonth } from "date-fns";
 import type { HDRSession, PhotoMode, Property, User, UserPlan, UserRole } from "@/lib/models";
 import { hasSupabase, supabase } from "@/lib/supabaseClient";
 import * as local from "@/lib/snapdb.local";
-import { dataUrlToBlob, getMimeType } from "@/utils/helpers"; // Importar helpers para blob e mime type
+import { dataUrlToBlob } from "@/lib/fileActions"; // Importar dataUrlToBlob do arquivo correto
+import { getMimeType } from "@/utils/helpers"; // Importar getMimeType do arquivo correto
 
 function nowIso() {
   return new Date().toISOString();
