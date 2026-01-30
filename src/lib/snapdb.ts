@@ -148,7 +148,8 @@ export async function loginWithEmail(email: string, password: string): Promise<U
   console.log("[snapdb] Attempting login with email:", email);
   if (!hasSupabase) throw new Error("Supabase não configurado. Não é possível fazer login.");
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  console.log("[snapdb] signInWithPassword result:", { data, error });
   if (error) {
     console.error("[snapdb] Error during email login:", error);
     throw new Error(error.message);
@@ -172,6 +173,7 @@ export async function loginWithGoogle(): Promise<void> {
     provider: "google",
     options: { redirectTo },
   });
+  console.log("[snapdb] signInWithOAuth result:", { error });
   if (error) {
     console.error("[snapdb] Error during Google login:", error);
     throw new Error(error.message);
@@ -202,6 +204,7 @@ export async function registerWithEmail(args: {
       },
     },
   });
+  console.log("[snapdb] signUp result:", { data, error });
   if (error) {
     console.error("[snapdb] Error during Supabase signUp:", error);
     throw new Error(error.message);
@@ -254,6 +257,7 @@ export async function requestPasswordReset(email: string) {
 
   const redirectTo = `${window.location.origin}/auth/login`;
   const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+  console.log("[snapdb] resetPasswordForEmail result:", { error });
   if (error) {
     console.error("[snapdb] Error during password reset request:", error);
     throw new Error(error.message);
