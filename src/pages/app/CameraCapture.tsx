@@ -6,7 +6,7 @@ import { useCamera } from "@/hooks/useCamera";
 import { CameraViewfinder } from "@/components/app/CameraViewfinder";
 import { CameraControls } from "@/components/app/CameraControls";
 import { aiService } from "@/services/aiService";
-import { createHdrSession, updateHdrSession, uploadHdrImage } from "@/lib/snapdb";
+import { createHdrSession, updateHdrSession, uploadHdrImage } from "@/services/hdrService"; // Updated import
 import { useAuth } from "@/lib/auth";
 import type { PhotoMode } from "@/lib/models";
 
@@ -34,7 +34,7 @@ export default function CameraCapture() {
     minEv,
     maxEv,
     applyExposureCompensation,
-    supportsExposureCompensation, // Get the new state
+    supportsExposureCompensation,
   } = useCamera();
 
   const shutter = React.useRef<HTMLAudioElement>(new Audio(SHUTTER_SOUND));
@@ -164,8 +164,8 @@ export default function CameraCapture() {
     const mode = sceneMode === "exterior" ? "hp_hdr_exterior" : "hp_hdr_window";
 
     try {
-      await applyExposureCompensation(manualEv); // Apply manual EV for single shot
-      await new Promise(r => setTimeout(r, 300)); // Give camera time to adjust
+      await applyExposureCompensation(manualEv);
+      await new Promise(r => setTimeout(r, 300));
 
       const dataUrl = await captureFrame();
       if (dataUrl) {
@@ -185,7 +185,7 @@ export default function CameraCapture() {
       }
     } finally {
       setProcessing(null);
-      applyExposureCompensation(manualEv); // Reset to manualEv
+      applyExposureCompensation(manualEv);
     }
   };
 
@@ -205,9 +205,8 @@ export default function CameraCapture() {
 
       if (!supportsExposureCompensation) {
         toast.warning("Seu dispositivo não suporta bracketing de exposição. Capturando uma única foto.");
-        // Fallback to single photo capture
         await createHdrSession({ userId: user.id, propertyId, imagesCount: 1, mode, id: photoId });
-        await applyExposureCompensation(manualEv); // Ensure manual EV is applied
+        await applyExposureCompensation(manualEv);
         await new Promise(r => setTimeout(r, 300));
         const dataUrl = await captureFrame();
         if (dataUrl) {
@@ -217,7 +216,7 @@ export default function CameraCapture() {
         } else {
           throw new Error("Nenhum frame capturado no fallback.");
         }
-        return; // Exit HDR function after fallback
+        return;
       }
 
       await createHdrSession({ userId: user.id, propertyId, imagesCount: EV_STEPS.length, mode, id: photoId });
@@ -229,9 +228,6 @@ export default function CameraCapture() {
           await new Promise(r => setTimeout(r, 650));
         } catch (e) {
             console.warn("[CameraCapture] Exposure constraints failed for frame", i, e);
-            // If a specific frame fails, we can skip it but try to continue with others
-            // Or, if it's a persistent error, we might want to break and fallback.
-            // For now, we'll just log and skip this frame.
             continue;
         }
 
@@ -258,7 +254,6 @@ export default function CameraCapture() {
       console.error(e);
       toast.error("Falha na captura HDR.");
       if (propertyId && user?.id) {
-        // Ensure a session is marked as error even if initial creation failed
         await createHdrSession({ userId: user.id, propertyId, imagesCount: 0, mode, id: photoId });
         await updateHdrSession(photoId, { status: "error", errorMessage: (e as Error).message });
       }

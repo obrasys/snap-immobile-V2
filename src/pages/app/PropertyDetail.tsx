@@ -5,7 +5,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { CalendarDays, Camera } from "lucide-react";
 import { TopBar, IconTopButton } from "@/components/app/TopBar";
 import { Card } from "@/components/ui/card";
-import { getProperty, listSessions } from "@/lib/snapdb";
+import { getProperty } from "@/services/propertyService"; // Updated import
+import { listSessions } from "@/services/hdrService"; // Updated import
 import { propertyCoverUrl } from "@/lib/images";
 import type { HDRSession, Property } from "@/lib/models";
 import { showError } from "@/utils/toast";

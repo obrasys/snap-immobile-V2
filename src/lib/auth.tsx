@@ -7,7 +7,7 @@ import {
   logout,
   registerWithEmail,
   requestPasswordReset,
-} from "@/lib/snapdb";
+} from "@/services/authService"; // Updated import
 import { supabase } from "@/integrations/supabase/client";
 import { hasSupabase } from "@/integrations/supabase/client";
 

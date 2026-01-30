@@ -6,10 +6,10 @@ import { Camera, Plus, Search, UserRoundCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
-import { listProperties } from "@/lib/snapdb";
+import { listProperties } from "@/services/propertyService"; // Updated import
 import { propertyCoverUrl } from "@/lib/images";
 import { TopBar, IconTopButton } from "@/components/app/TopBar";
-import { showError, showSuccess } from "@/utils/toast"; // Added showError import
+import { showError, showSuccess } from "@/utils/toast";
 import { CreatePropertyDrawer } from "@/components/app/CreatePropertyDrawer";
 import type { Property } from "@/lib/models";
 
@@ -28,7 +28,6 @@ export default function Properties({
   useEffect(() => {
     if (openCreateOnMount) {
       setCreateOpen(true);
-      // mantém comportamento de rota antiga, mas já volta para a listagem
       nav("/app/properties", { replace: true });
     }
   }, [openCreateOnMount, nav]);
@@ -53,7 +52,7 @@ export default function Properties({
       }
     }
     fetchProperties();
-  }, [user, createOpen]); // Re-fetch when user changes or a new property is created
+  }, [user, createOpen]);
 
   return (
     <div className="min-h-dvh bg-background">
@@ -135,7 +134,7 @@ export default function Properties({
           open={createOpen}
           onOpenChange={setCreateOpen}
           userId={user.id}
-          onCreated={() => setCreateOpen(false)} // Close drawer and trigger re-fetch
+          onCreated={() => setCreateOpen(false)}
         />
       ) : null}
     </div>

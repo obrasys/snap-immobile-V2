@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createProperty } from "@/lib/snapdb";
+import { createProperty } from "@/services/propertyService"; // Updated import
 import { showError, showSuccess } from "@/utils/toast";
 
 const STATES = [

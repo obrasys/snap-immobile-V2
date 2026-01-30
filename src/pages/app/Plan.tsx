@@ -3,7 +3,7 @@ import { AppShell } from "@/components/app/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
-import { upgradePlan } from "@/lib/snapdb";
+import { upgradePlan } from "@/services/profileService"; // Updated import
 import { showSuccess } from "@/utils/toast";
 
 export default function Plan() {
