@@ -10,6 +10,7 @@ import NotFound from "./pages/NotFound";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import ForgotPassword from "./pages/auth/ForgotPassword";
+import OAuthCallback from "./pages/auth/OAuthCallback"; // Importar o componente OAuthCallback
 import Properties from "./pages/app/Properties";
 import Settings from "./pages/app/Settings";
 import PropertyDetail from "./pages/app/PropertyDetail";
@@ -32,6 +33,7 @@ const App = () => (
             <Route path="/auth/login" element={<Login />} />
             <Route path="/auth/register" element={<Register />} />
             <Route path="/auth/forgot" element={<ForgotPassword />} />
+            <Route path="/auth/callback" element={<OAuthCallback />} /> {/* Adicionar esta rota */}
 
             <Route
               path="/app/properties"
