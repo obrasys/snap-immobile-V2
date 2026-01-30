@@ -14,4 +14,5 @@ export default defineConfig(() => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  envPrefix: 'VITE_', // Adicionado para garantir que as variáveis de ambiente com prefixo VITE_ sejam carregadas
 }));
