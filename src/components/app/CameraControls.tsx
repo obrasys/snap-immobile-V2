@@ -23,6 +23,7 @@ interface CameraControlsProps {
   handleMainCapture: () => void;
   showGrid: boolean;
   setShowGrid: (show: boolean) => void;
+  supportsExposureCompensation: boolean; // New prop
 }
 
 export function CameraControls({
@@ -42,10 +43,12 @@ export function CameraControls({
   handleMainCapture,
   showGrid,
   setShowGrid,
+  supportsExposureCompensation, // Destructure new prop
 }: CameraControlsProps) {
   const navigate = useNavigate();
 
   const isDisabled = !!processing || !!cameraError;
+  const isHdrDisabled = !supportsExposureCompensation; // Determine if HDR should be disabled
 
   return (
     <>
@@ -174,8 +177,8 @@ export function CameraControls({
           {/* Toggle Capture Mode Button */}
           <button
             onClick={() => setCaptureMode((prev) => (prev === "single" ? "hdr" : "single"))}
-            disabled={isDisabled}
-            className="text-white/40 hover:text-white p-2"
+            disabled={isDisabled || isHdrDisabled} // Disable if HDR is not supported
+            className={`text-white/40 hover:text-white p-2 ${isHdrDisabled ? "opacity-30 cursor-not-allowed" : ""}`}
             style={uiRotateStyle}
           >
             {captureMode === "single" ? (

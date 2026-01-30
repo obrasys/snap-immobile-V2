@@ -6,7 +6,7 @@ import { useCamera } from "@/hooks/useCamera";
 import { CameraViewfinder } from "@/components/app/CameraViewfinder";
 import { CameraControls } from "@/components/app/CameraControls";
 import { aiService } from "@/services/aiService";
-import { createHdrSession, updateHdrSession, uploadHdrImage } from "@/lib/snapdb"; // Importar uploadHdrImage
+import { createHdrSession, updateHdrSession, uploadHdrImage } from "@/lib/snapdb";
 import { useAuth } from "@/lib/auth";
 import type { PhotoMode } from "@/lib/models";
 
@@ -14,13 +14,13 @@ const EV_STEPS = [-4, -3, -2, -1, 0, 1, 2, 3, 4]; // 9 exposições
 const SHUTTER_SOUND =
   "data:audio/mp3;base64,//uQZAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//sQxAADgnABuQAAAgAEAAP//wAABAAEAAA=";
 
-type CaptureMode = "single" | "hdr"; // Novo tipo para o modo de captura
+type CaptureMode = "single" | "hdr";
 
 export default function CameraCapture() {
   const navigate = useNavigate();
   const { id: propertyId } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { angle } = useOrientationAngle(); // Este ângulo é a orientação do dispositivo
+  const { angle } = useOrientationAngle();
 
   const {
     videoRef,
@@ -34,13 +34,14 @@ export default function CameraCapture() {
     minEv,
     maxEv,
     applyExposureCompensation,
+    supportsExposureCompensation, // Get the new state
   } = useCamera();
 
   const shutter = React.useRef<HTMLAudioElement>(new Audio(SHUTTER_SOUND));
 
   const [windowSize, setWindowSize] = useState({ w: window.innerWidth, h: window.innerHeight });
   const [sceneMode, setSceneMode] = useState<"interior" | "exterior">("interior");
-  const [captureMode, setCaptureMode] = useState<CaptureMode>("hdr"); // Padrão para HDR
+  const [captureMode, setCaptureMode] = useState<CaptureMode>("hdr");
 
   const [processing, setProcessing] = useState<string | null>(null);
   const [bracketIndex, setBracketIndex] = useState<number | null>(null);
@@ -73,12 +74,10 @@ export default function CameraCapture() {
     return { w, h };
   }, [windowSize, isLandscape]);
 
-  // Estilo para os elementos da UI permanecerem na vertical em relação ao dispositivo
   const uiRotateStyle = useMemo(() => {
     return { transform: `rotate(${-angle}deg)` };
   }, [angle]);
 
-  // Estilo para o elemento de vídeo girar seu conteúdo para corresponder à orientação da UI
   const videoRotateStyle = useMemo(() => {
     return { transform: `rotate(${angle}deg)` };
   }, [angle]);
@@ -96,10 +95,7 @@ export default function CameraCapture() {
       if (!user?.id || !propertyId) return;
 
       try {
-        // 1. Upload da imagem para o Supabase Storage
         const imageUrl = await uploadHdrImage(user.id, photoId, base64Image);
-        
-        // 2. Atualizar a sessão HDR com a URL da imagem
         await updateHdrSession(photoId, { hdrImageUrl: imageUrl, status: "done", mode });
       } catch (error) {
         console.error("Failed to save photo:", error);
@@ -113,9 +109,9 @@ export default function CameraCapture() {
   const processHDRInBackground = useCallback(
     async (
       photoId: string,
-      _bracketIds: string[], // Não mais usado para armazenamento local
+      _bracketIds: string[],
       mode: "hp_hdr_exterior" | "hp_hdr_window",
-      base64Image: string // Imagem base64 para processamento AI
+      base64Image: string
     ) => {
       if (!user?.id || !propertyId) return;
       try {
@@ -133,7 +129,7 @@ export default function CameraCapture() {
   const captureFrame = async (): Promise<string | null> => {
     const video = videoRef.current;
     if (!video) return null;
-    
+
     shutter.current.currentTime = 0;
     shutter.current.play().catch(() => {});
 
@@ -168,11 +164,8 @@ export default function CameraCapture() {
     const mode = sceneMode === "exterior" ? "hp_hdr_exterior" : "hp_hdr_window";
 
     try {
-      const track = trackRef.current;
-      if (!track) throw new Error("Câmara não pronta");
-
-      await applyExposureCompensation(manualEv);
-      await new Promise(r => setTimeout(r, 300));
+      await applyExposureCompensation(manualEv); // Apply manual EV for single shot
+      await new Promise(r => setTimeout(r, 300)); // Give camera time to adjust
 
       const dataUrl = await captureFrame();
       if (dataUrl) {
@@ -180,6 +173,8 @@ export default function CameraCapture() {
         await onSmartSave(dataUrl, mode, photoId);
         toast.success("Foto guardada!");
         navigate(-1);
+      } else {
+        throw new Error("Nenhum frame capturado.");
       }
     } catch (e) {
       console.error(e);
@@ -198,35 +193,32 @@ export default function CameraCapture() {
     if (!propertyId || processing || !user?.id) return;
 
     setProcessing("A CAPTURAR HDR...");
-    const ids: string[] = []; // Ainda útil para rastrear o número de brackets
-    let capturedBase64Image: string | null = null; // Imagem do meio para processamento AI
+    const ids: string[] = [];
+    let capturedBase64Image: string | null = null;
+
+    const mode: PhotoMode = sceneMode === "exterior" ? "hp_hdr_exterior" : "hp_hdr_window";
+    const photoId = `photo_${Date.now()}`;
 
     try {
-      const video = videoRef.current;
       const track = trackRef.current;
-      if (!video || !track) throw new Error("Câmara não pronta");
+      if (!track) throw new Error("Câmara não pronta");
 
-      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
-      // @ts-ignore
-      const supportsExposure = capabilities.exposureCompensation || capabilities.exposureMode;
-
-      if (!supportsExposure) {
-        // Fallback para captura única se não houver suporte a EV
+      if (!supportsExposureCompensation) {
+        toast.warning("Seu dispositivo não suporta bracketing de exposição. Capturando uma única foto.");
+        // Fallback to single photo capture
+        await createHdrSession({ userId: user.id, propertyId, imagesCount: 1, mode, id: photoId });
+        await applyExposureCompensation(manualEv); // Ensure manual EV is applied
+        await new Promise(r => setTimeout(r, 300));
         const dataUrl = await captureFrame();
         if (dataUrl) {
-            const mode = sceneMode === "exterior" ? "hp_hdr_exterior" : "hp_hdr_window";
-            const photoId = `photo_${Date.now()}`;
-            await createHdrSession({ userId: user.id, propertyId, imagesCount: 1, mode, id: photoId });
-            await onSmartSave(dataUrl, mode, photoId);
-            toast.success("Foto guardada!");
-            navigate(-1);
+          await onSmartSave(dataUrl, mode, photoId);
+          toast.success("Foto guardada!");
+          navigate(-1);
+        } else {
+          throw new Error("Nenhum frame capturado no fallback.");
         }
-        setProcessing(null);
-        return;
+        return; // Exit HDR function after fallback
       }
-
-      const photoId = `photo_${Date.now()}`;
-      const mode: PhotoMode = sceneMode === "exterior" ? "hp_hdr_exterior" : "hp_hdr_window";
 
       await createHdrSession({ userId: user.id, propertyId, imagesCount: EV_STEPS.length, mode, id: photoId });
 
@@ -236,42 +228,44 @@ export default function CameraCapture() {
           await track.applyConstraints({ advanced: [{ exposureCompensation: EV_STEPS[i] }] } as any);
           await new Promise(r => setTimeout(r, 650));
         } catch (e) {
-            console.warn("Exposure constraints failed, skipping frame", e);
+            console.warn("[CameraCapture] Exposure constraints failed for frame", i, e);
+            // If a specific frame fails, we can skip it but try to continue with others
+            // Or, if it's a persistent error, we might want to break and fallback.
+            // For now, we'll just log and skip this frame.
             continue;
         }
 
         const dataUrl = await captureFrame();
         if (dataUrl) {
-            ids.push(`bracket_${Date.now()}_${i}`); // Apenas para contagem, não para armazenamento local
+            ids.push(`bracket_${Date.now()}_${i}`);
             if (i === Math.floor(EV_STEPS.length / 2)) {
-              capturedBase64Image = dataUrl; // Salva a imagem do meio para processamento AI
+              capturedBase64Image = dataUrl;
             }
         }
       }
 
-      await applyExposureCompensation(manualEv); // Reset exposure to manualEv
+      await applyExposureCompensation(manualEv);
 
-      if (ids.length === 0) throw new Error("Nenhum frame capturado");
-      if (!capturedBase64Image) throw new Error("Imagem para processamento HDR não capturada.");
-      
-      // Salva a imagem do meio como preview e inicia o processamento HDR em segundo plano
+      if (ids.length === 0) throw new Error("Nenhum frame capturado para HDR.");
+      if (!capturedBase64Image) throw new Error("Imagem central para processamento HDR não capturada.");
+
       await onSmartSave(capturedBase64Image, mode, photoId);
       toast.success("Foto guardada! A processar HDR...");
-      processHDRInBackground(photoId, ids, mode, capturedBase64Image); // Passa a imagem base64 para o AI
+      processHDRInBackground(photoId, ids, mode, capturedBase64Image);
       navigate(-1);
-      
+
     } catch (e) {
       console.error(e);
       toast.error("Falha na captura HDR.");
       if (propertyId && user?.id) {
-        const photoId = `photo_${Date.now()}`;
-        await createHdrSession({ userId: user.id, propertyId, imagesCount: 0, mode: sceneMode === "exterior" ? "hp_hdr_exterior" : "hp_hdr_window", id: photoId });
+        // Ensure a session is marked as error even if initial creation failed
+        await createHdrSession({ userId: user.id, propertyId, imagesCount: 0, mode, id: photoId });
         await updateHdrSession(photoId, { status: "error", errorMessage: (e as Error).message });
       }
     } finally {
       setProcessing(null);
       setBracketIndex(null);
-      applyExposureCompensation(manualEv); // Ensure exposure is reset to manualEv
+      applyExposureCompensation(manualEv);
     }
   };
 
@@ -314,6 +308,7 @@ export default function CameraCapture() {
         handleMainCapture={handleMainCapture}
         showGrid={showGrid}
         setShowGrid={setShowGrid}
+        supportsExposureCompensation={supportsExposureCompensation}
       />
     </div>
   );

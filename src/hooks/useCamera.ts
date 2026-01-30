@@ -12,6 +12,7 @@ export function useCamera() {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [zoomPreset, setZoomPreset] = useState<ZoomPreset>(1.0);
   const [manualEv, setManualEv] = useState(0);
+  const [supportsExposureCompensation, setSupportsExposureCompensation] = useState(false);
 
   const minEv = -3;
   const maxEv = 3;
@@ -39,7 +40,10 @@ export function useCamera() {
 
   const applyExposureCompensation = useCallback(async (ev: number) => {
     const track = trackRef.current;
-    if (!track || !track.getCapabilities || !track.getSettings) return;
+    if (!track || !track.getCapabilities || !track.getSettings) {
+      setSupportsExposureCompensation(false);
+      return;
+    }
 
     const capabilities = track.getCapabilities();
     // @ts-ignore
@@ -47,9 +51,15 @@ export function useCamera() {
       try {
         // @ts-ignore
         await track.applyConstraints({ advanced: [{ exposureCompensation: ev }] });
-      } catch (e) {
-        console.warn("Failed to apply exposure compensation:", e);
+        setSupportsExposureCompensation(true);
+      } catch (e: any) {
+        console.warn("[useCamera] Failed to apply exposure compensation:", e);
+        if (e.name === "OverconstrainedError") {
+          setSupportsExposureCompensation(false);
+        }
       }
+    } else {
+      setSupportsExposureCompensation(false);
     }
   }, []);
 
@@ -93,6 +103,10 @@ export function useCamera() {
           const main = findBackMain(vids);
           if (main) setSelectedDeviceId(main);
         }
+        // Check capabilities after stream is active
+        const capabilities = track.getCapabilities();
+        // @ts-ignore
+        setSupportsExposureCompensation(!!capabilities.exposureCompensation);
         await applyExposureCompensation(manualEv);
 
       } catch (err: any) {
@@ -101,6 +115,9 @@ export function useCamera() {
             setCameraError("Acesso à câmara negado. Verifique as permissões.");
         } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
             setCameraError("Nenhuma câmara encontrada.");
+        } else if (err.name === "OverconstrainedError") {
+            setCameraError("Câmara não suporta as configurações solicitadas (ex: resolução).");
+            setSupportsExposureCompensation(false); // Explicitly set to false if initial constraints fail
         } else {
             setCameraError("Erro ao iniciar a câmara.");
         }
@@ -117,10 +134,10 @@ export function useCamera() {
   }, [startCamera]);
 
   useEffect(() => {
-    if (trackRef.current) {
+    if (trackRef.current && supportsExposureCompensation) { // Only apply if supported
       applyExposureCompensation(manualEv);
     }
-  }, [manualEv, applyExposureCompensation]);
+  }, [manualEv, applyExposureCompensation, supportsExposureCompensation]);
 
   const handleZoomPreset = useCallback(async (preset: ZoomPreset) => {
     setZoomPreset(preset);
@@ -153,5 +170,6 @@ export function useCamera() {
     maxEv,
     applyExposureCompensation,
     startCamera,
+    supportsExposureCompensation, // Expose this state
   };
 }
