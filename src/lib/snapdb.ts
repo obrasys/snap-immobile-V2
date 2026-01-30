@@ -1,6 +1,7 @@
 import { startOfMonth } from "date-fns";
 import type { HDRSession, PhotoMode, Property, User, UserPlan, UserRole } from "@/lib/models";
-import { hasSupabase, supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/integrations/supabase/client"; // Import atualizado
+import { hasSupabase } from "@/integrations/supabase/client"; // Import atualizado
 import { dataUrlToBlob } from "@/lib/fileActions";
 import { getMimeType } from "@/utils/helpers";
 

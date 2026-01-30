@@ -4,11 +4,12 @@ import {
   getCurrentUser,
   loginWithEmail,
   loginWithGoogle,
-  logout, // Agora importamos diretamente o logout do snapdb
+  logout,
   registerWithEmail,
   requestPasswordReset,
 } from "@/lib/snapdb";
-import { hasSupabase, supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/integrations/supabase/client"; // Import atualizado
+import { hasSupabase } from "@/integrations/supabase/client"; // Import atualizado
 
 type AuthContextValue = {
   user: User | null;
