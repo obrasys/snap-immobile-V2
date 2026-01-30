@@ -1,9 +1,8 @@
 import { startOfMonth } from "date-fns";
 import type { HDRSession, PhotoMode, Property, User, UserPlan, UserRole } from "@/lib/models";
 import { hasSupabase, supabase } from "@/lib/supabaseClient";
-import * as local from "@/lib/snapdb.local";
-import { dataUrlToBlob } from "@/lib/fileActions"; // Importar dataUrlToBlob do arquivo correto
-import { getMimeType } from "@/utils/helpers"; // Importar getMimeType do arquivo correto
+import { dataUrlToBlob } from "@/lib/fileActions";
+import { getMimeType } from "@/utils/helpers";
 
 function nowIso() {
   return new Date().toISOString();
@@ -12,7 +11,7 @@ function nowIso() {
 async function getProfile(userId: string) {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, name, last_name, email, phone, cpf, company, role, plan, photo_url, created_at")
+    .select("id, first_name, last_name, email, phone, cpf, company, role, plan, avatar_url, created_at")
     .eq("id", userId)
     .maybeSingle();
 
@@ -22,7 +21,7 @@ async function getProfile(userId: string) {
 
 async function upsertProfile(input: {
   id: string;
-  name: string;
+  firstName: string;
   lastName?: string;
   email: string;
   phone?: string;
@@ -30,11 +29,11 @@ async function upsertProfile(input: {
   company?: string;
   role: UserRole;
   plan: UserPlan;
-  photoUrl?: string;
+  avatarUrl?: string;
 }) {
   const { error } = await supabase.from("profiles").upsert({
     id: input.id,
-    name: input.name,
+    first_name: input.firstName,
     last_name: input.lastName ?? "",
     email: input.email,
     phone: input.phone ?? "",
@@ -42,8 +41,8 @@ async function upsertProfile(input: {
     company: input.company ?? "",
     role: input.role,
     plan: input.plan,
-    photo_url: input.photoUrl ?? "",
-    created_at: nowIso(),
+    avatar_url: input.avatarUrl ?? "",
+    updated_at: nowIso(), // Use updated_at for upsert
   });
   if (error) throw error;
 }
@@ -54,7 +53,7 @@ export const planLimits: Record<UserPlan, { hdrPerMonth: number }> = {
 };
 
 export async function getCurrentUser(): Promise<User | null> {
-  if (!hasSupabase) return local.getCurrentUser();
+  if (!hasSupabase) throw new Error("Supabase não configurado. Não é possível obter o usuário.");
 
   const { data } = await supabase.auth.getUser();
   const au = data.user;
@@ -67,15 +66,15 @@ export async function getCurrentUser(): Promise<User | null> {
   if (!existing) {
     await upsertProfile({
       id: au.id,
-      name: (au.user_metadata as any)?.full_name || "Usuário",
-      lastName: "",
+      firstName: (au.user_metadata as any)?.first_name || "Usuário",
+      lastName: (au.user_metadata as any)?.last_name || "",
       email,
       phone: "",
       cpf: "",
       company: "",
       role: "corretor",
       plan: "free",
-      photoUrl: typeof avatar === "string" ? avatar : "",
+      avatarUrl: typeof avatar === "string" ? avatar : "",
     });
   }
 
@@ -83,26 +82,26 @@ export async function getCurrentUser(): Promise<User | null> {
 
   return {
     id: au.id,
-    name: profile?.name ?? (au.user_metadata as any)?.full_name ?? "Usuário",
-    lastName: profile?.last_name ?? "",
+    name: profile?.first_name ?? (au.user_metadata as any)?.first_name ?? "Usuário",
+    lastName: profile?.last_name ?? (au.user_metadata as any)?.last_name ?? "",
     email: profile?.email ?? email,
     phone: profile?.phone ?? "",
     cpf: profile?.cpf ?? "",
     company: profile?.company ?? "",
     role: (profile?.role as UserRole) ?? "corretor",
     plan: (profile?.plan as UserPlan) ?? "free",
-    photoUrl: profile?.photo_url || (typeof avatar === "string" ? avatar : undefined),
+    photoUrl: profile?.avatar_url || (typeof avatar === "string" ? avatar : undefined),
     createdAt: profile?.created_at ?? nowIso(),
   };
 }
 
 export async function logout() {
-  if (!hasSupabase) return local.logout();
+  if (!hasSupabase) throw new Error("Supabase não configurado. Não é possível fazer logout.");
   await supabase.auth.signOut();
 }
 
 export async function loginWithEmail(email: string, password: string): Promise<User> {
-  if (!hasSupabase) return local.loginWithEmail(email, password);
+  if (!hasSupabase) throw new Error("Supabase não configurado. Não é possível fazer login.");
 
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw new Error(error.message);
@@ -113,11 +112,7 @@ export async function loginWithEmail(email: string, password: string): Promise<U
 }
 
 export async function loginWithGoogle(): Promise<void> {
-  if (!hasSupabase) {
-    // fallback: mantém demo local
-    local.loginWithGoogleDemo();
-    return;
-  }
+  if (!hasSupabase) throw new Error("Supabase não configurado. Não é possível fazer login com Google.");
 
   const redirectTo = `${window.location.origin}/auth/callback`;
   const { error } = await supabase.auth.signInWithOAuth({
@@ -137,14 +132,15 @@ export async function registerWithEmail(args: {
   password: string;
   role: UserRole;
 }): Promise<User> {
-  if (!hasSupabase) return local.registerWithEmail(args);
+  if (!hasSupabase) throw new Error("Supabase não configurado. Não é possível registrar.");
 
   const { data, error } = await supabase.auth.signUp({
     email: args.email,
     password: args.password,
     options: {
       data: {
-        full_name: `${args.name} ${args.lastName ?? ""}`.trim(),
+        first_name: args.name,
+        last_name: args.lastName ?? "",
       },
     },
   });
@@ -154,7 +150,7 @@ export async function registerWithEmail(args: {
 
   await upsertProfile({
     id: au.id,
-    name: args.name,
+    firstName: args.name,
     lastName: args.lastName ?? "",
     email: args.email,
     phone: args.phone ?? "",
@@ -162,7 +158,7 @@ export async function registerWithEmail(args: {
     company: args.company ?? "",
     role: args.role,
     plan: "free",
-    photoUrl: "",
+    avatarUrl: "",
   });
 
   // Em projetos com confirmação de e-mail habilitada, a sessão pode não existir ainda.
@@ -186,7 +182,7 @@ export async function registerWithEmail(args: {
 }
 
 export async function requestPasswordReset(email: string) {
-  if (!hasSupabase) return local.requestPasswordReset(email);
+  if (!hasSupabase) throw new Error("Supabase não configurado. Não é possível redefinir a senha.");
 
   const redirectTo = `${window.location.origin}/auth/login`;
   const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
@@ -195,7 +191,7 @@ export async function requestPasswordReset(email: string) {
 }
 
 export async function listProperties(userId: string): Promise<Property[]> {
-  if (!hasSupabase) return local.listProperties(userId);
+  if (!hasSupabase) throw new Error("Supabase não configurado. Não é possível listar imóveis.");
 
   const { data, error } = await supabase
     .from("properties")
@@ -218,7 +214,7 @@ export async function listProperties(userId: string): Promise<Property[]> {
 }
 
 export async function getProperty(propertyId: string): Promise<Property | null> {
-  if (!hasSupabase) return local.getProperty(propertyId);
+  if (!hasSupabase) throw new Error("Supabase não configurado. Não é possível obter o imóvel.");
 
   const { data, error } = await supabase
     .from("properties")
@@ -245,7 +241,7 @@ export async function createProperty(args: {
   address: string;
   description?: string;
 }): Promise<Property> {
-  if (!hasSupabase) return local.createProperty(args);
+  if (!hasSupabase) throw new Error("Supabase não configurado. Não é possível criar imóvel.");
 
   const { data, error } = await supabase
     .from("properties")
@@ -271,11 +267,11 @@ export async function createProperty(args: {
 }
 
 export async function listSessions(propertyId: string): Promise<HDRSession[]> {
-  if (!hasSupabase) return local.listSessions(propertyId);
+  if (!hasSupabase) throw new Error("Supabase não configurado. Não é possível listar sessões.");
 
   const { data, error } = await supabase
     .from("hdr_sessions")
-    .select("id, property_id, images_count, hdr_image_url, status, error_message, created_at, mode") // Renomeado hdr_image_data_url para hdr_image_url
+    .select("id, property_id, images_count, hdr_image_url, status, error_message, created_at, mode")
     .eq("property_id", propertyId)
     .order("created_at", { ascending: false });
 
@@ -286,7 +282,7 @@ export async function listSessions(propertyId: string): Promise<HDRSession[]> {
       id: s.id,
       propertyId: s.property_id,
       imagesCount: s.images_count,
-      hdrImageUrl: s.hdr_image_url ?? undefined, // Renomeado hdrImageDataUrl para hdrImageUrl
+      hdrImageUrl: s.hdr_image_url ?? undefined,
       status: s.status,
       errorMessage: s.error_message ?? undefined,
       createdAt: s.created_at,
@@ -300,7 +296,7 @@ export async function canCreateHdrSession(userId: string): Promise<{
   usedThisMonth: number;
   limitThisMonth: number;
 }> {
-  if (!hasSupabase) return local.canCreateHdrSession(userId);
+  if (!hasSupabase) throw new Error("Supabase não configurado. Não é possível verificar o limite de sessões.");
 
   const user = await getCurrentUser();
   if (!user) return { ok: false, usedThisMonth: 0, limitThisMonth: 0 };
@@ -324,22 +320,22 @@ export async function createHdrSession(args: {
   userId: string;
   propertyId: string;
   imagesCount: number;
-  mode: PhotoMode; // Adicionado o modo da foto
-  id?: string; // Permitir ID opcional para rastreamento
+  mode: PhotoMode;
+  id?: string;
 }): Promise<HDRSession> {
-  if (!hasSupabase) return local.createHdrSession({ propertyId: args.propertyId, imagesCount: args.imagesCount });
+  if (!hasSupabase) throw new Error("Supabase não configurado. Não é possível criar sessão HDR.");
 
   const { data, error } = await supabase
     .from("hdr_sessions")
     .insert({
-      id: args.id, // Usar ID fornecido ou deixar o DB gerar
+      id: args.id,
       user_id: args.userId,
       property_id: args.propertyId,
       images_count: args.imagesCount,
       status: "processing",
-      mode: args.mode, // Salvar o modo
+      mode: args.mode,
     })
-    .select("id, property_id, images_count, hdr_image_url, status, error_message, created_at, mode") // Selecionar hdr_image_url
+    .select("id, property_id, images_count, hdr_image_url, status, error_message, created_at, mode")
     .single();
 
   if (error) throw new Error(error.message);
@@ -348,7 +344,7 @@ export async function createHdrSession(args: {
     id: data.id,
     propertyId: data.property_id,
     imagesCount: data.images_count,
-    hdrImageUrl: data.hdr_image_url ?? undefined, // Mapear para hdrImageUrl
+    hdrImageUrl: data.hdr_image_url ?? undefined,
     status: data.status,
     errorMessage: data.error_message ?? undefined,
     createdAt: data.created_at,
@@ -357,11 +353,11 @@ export async function createHdrSession(args: {
 }
 
 export async function updateHdrSession(sessionId: string, patch: Partial<HDRSession>) {
-  if (!hasSupabase) return local.updateHdrSession(sessionId, patch);
+  if (!hasSupabase) throw new Error("Supabase não configurado. Não é possível atualizar sessão HDR.");
 
   const mapped: Record<string, unknown> = {};
   if (typeof patch.status !== "undefined") mapped.status = patch.status;
-  if (typeof patch.hdrImageUrl !== "undefined") mapped.hdr_image_url = patch.hdrImageUrl; // Renomeado para hdr_image_url
+  if (typeof patch.hdrImageUrl !== "undefined") mapped.hdr_image_url = patch.hdrImageUrl;
   if (typeof patch.errorMessage !== "undefined") mapped.error_message = patch.errorMessage;
   if (typeof patch.mode !== "undefined") mapped.mode = patch.mode;
 
@@ -374,18 +370,17 @@ export async function uploadHdrImage(userId: string, sessionId: string, base64Im
 
   const blob = dataUrlToBlob(base64Image);
   const mimeType = getMimeType(base64Image);
-  const filePath = `${userId}/${sessionId}.${mimeType.split('/')[1] || 'jpeg'}`; // Ex: userId/sessionId.jpeg
+  const filePath = `${userId}/${sessionId}.${mimeType.split('/')[1] || 'jpeg'}`;
 
   const { data, error } = await supabase.storage
     .from('snap-immobile-photos')
     .upload(filePath, blob, {
       contentType: mimeType,
-      upsert: true, // Sobrescreve se o arquivo já existir
+      upsert: true,
     });
 
   if (error) throw new Error(`Falha ao fazer upload da imagem: ${error.message}`);
 
-  // Obter a URL pública da imagem
   const { data: publicUrlData } = supabase.storage
     .from('snap-immobile-photos')
     .getPublicUrl(filePath);
@@ -395,9 +390,8 @@ export async function uploadHdrImage(userId: string, sessionId: string, base64Im
   return publicUrlData.publicUrl;
 }
 
-
 export async function upgradePlan(userId: string, plan: UserPlan) {
-  if (!hasSupabase) return local.upgradePlan(userId, plan);
+  if (!hasSupabase) throw new Error("Supabase não configurado. Não é possível fazer upgrade do plano.");
 
   const { error } = await supabase.from("profiles").update({ plan }).eq("id", userId);
   if (error) throw new Error(error.message);

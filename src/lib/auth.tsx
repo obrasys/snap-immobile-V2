@@ -4,7 +4,7 @@ import {
   getCurrentUser,
   loginWithEmail,
   loginWithGoogle,
-  logout as dbLogout,
+  logout, // Agora importamos diretamente o logout do snapdb
   registerWithEmail,
   requestPasswordReset,
 } from "@/lib/snapdb";
@@ -82,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await requestPasswordReset(email);
       },
       logout: async () => {
-        await dbLogout();
+        await logout(); // Chama o logout do snapdb, que agora é Supabase
         setUser(null);
         setIsReady(true);
       },
