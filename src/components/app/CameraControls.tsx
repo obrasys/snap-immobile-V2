@@ -1,3 +1,5 @@
+"use client";
+
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Icons } from "@/components/app/Icons";
@@ -51,7 +53,7 @@ export function CameraControls({
   const isHdrDisabled = !supportsExposureCompensation; // Determine if HDR should be disabled
 
   return (
-    <React.Fragment>
+    <>
       {/* Scene Mode (right-center, rotating) */}
       {!isDisabled && (
         <div
@@ -195,6 +197,6 @@ export function CameraControls({
           </button>
         </div>
       </div>
-    </React.Fragment>
+    </>
   );
 }
