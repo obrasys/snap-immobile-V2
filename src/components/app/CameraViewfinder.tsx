@@ -10,6 +10,7 @@ interface CameraViewfinderProps {
   bracketIndex: number | null;
   evStepsLength: number;
   uiRotateStyle: React.CSSProperties;
+  videoRotateStyle: React.CSSProperties; // Adicionado o estilo de rotação para o vídeo
 }
 
 export function CameraViewfinder({
@@ -21,6 +22,7 @@ export function CameraViewfinder({
   bracketIndex,
   evStepsLength,
   uiRotateStyle,
+  videoRotateStyle, // Desestruturado o novo prop
 }: CameraViewfinderProps) {
   return (
     <div
@@ -33,6 +35,7 @@ export function CameraViewfinder({
         playsInline
         muted
         autoPlay
+        style={videoRotateStyle} // Aplicado o estilo de rotação diretamente ao vídeo
       />
       {showGrid && (
         <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none opacity-20">

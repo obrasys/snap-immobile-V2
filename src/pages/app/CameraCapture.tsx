@@ -26,7 +26,7 @@ export default function CameraCapture() {
   const navigate = useNavigate();
   const { id: propertyId } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { angle } = useOrientationAngle();
+  const { angle } = useOrientationAngle(); // Este ângulo é a orientação do dispositivo
 
   const {
     videoRef,
@@ -79,8 +79,14 @@ export default function CameraCapture() {
     return { w, h };
   }, [windowSize, isLandscape]);
 
+  // Estilo para os elementos da UI permanecerem na vertical em relação ao dispositivo
   const uiRotateStyle = useMemo(() => {
     return { transform: `rotate(${-angle}deg)` };
+  }, [angle]);
+
+  // Estilo para o elemento de vídeo girar seu conteúdo para corresponder à orientação da UI
+  const videoRotateStyle = useMemo(() => {
+    return { transform: `rotate(${angle}deg)` };
   }, [angle]);
 
   useEffect(() => {
@@ -301,6 +307,7 @@ export default function CameraCapture() {
         bracketIndex={bracketIndex}
         evStepsLength={EV_STEPS.length}
         uiRotateStyle={uiRotateStyle}
+        videoRotateStyle={videoRotateStyle} // Passando o novo estilo para o CameraViewfinder
       />
 
       <CameraControls
