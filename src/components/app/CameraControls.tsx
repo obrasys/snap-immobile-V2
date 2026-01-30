@@ -53,7 +53,7 @@ export function CameraControls({
   const isHdrDisabled = !supportsExposureCompensation; // Determine if HDR should be disabled
 
   return (
-    <>
+    <div className="relative w-full h-full"> {/* Adicionada uma div principal */}
       {/* Scene Mode (right-center, rotating) */}
       {!isDisabled && (
         <div
@@ -197,6 +197,6 @@ export function CameraControls({
           </button>
         </div>
       </div>
-    </>
+    </div>
   );
 }
