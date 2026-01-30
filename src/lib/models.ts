@@ -32,7 +32,7 @@ export type HDRSession = {
   id: string;
   propertyId: string;
   imagesCount: number;
-  hdrImageDataUrl?: string;
+  hdrImageUrl?: string; // Renomeado de hdrImageDataUrl para hdrImageUrl
   status: HDRSessionStatus;
   errorMessage?: string;
   createdAt: string; // ISO

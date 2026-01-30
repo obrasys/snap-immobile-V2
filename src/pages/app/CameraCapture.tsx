@@ -6,8 +6,7 @@ import { useCamera } from "@/hooks/useCamera";
 import { CameraViewfinder } from "@/components/app/CameraViewfinder";
 import { CameraControls } from "@/components/app/CameraControls";
 import { aiService } from "@/services/aiService";
-import { bracketStorage } from "@/lib/bracketStorage";
-import { createHdrSession, updateHdrSession } from "@/lib/snapdb";
+import { createHdrSession, updateHdrSession, uploadHdrImage } from "@/lib/snapdb"; // Importar uploadHdrImage
 import { useAuth } from "@/lib/auth";
 import type { PhotoMode } from "@/lib/models";
 
@@ -16,11 +15,6 @@ const SHUTTER_SOUND =
   "data:audio/mp3;base64,//uQZAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//sQxAADgnABuQAAAgAEAAP//wAABAAEAAA=";
 
 type CaptureMode = "single" | "hdr"; // Novo tipo para o modo de captura
-
-const dataUrlToBlob = async (dataUrl: string): Promise<Blob> => {
-  const res = await fetch(dataUrl);
-  return await res.blob();
-};
 
 export default function CameraCapture() {
   const navigate = useNavigate();
@@ -98,20 +92,19 @@ export default function CameraCapture() {
   }, []);
 
   const onSmartSave = useCallback(
-    async (image: string, mode: PhotoMode, photoId?: string) => {
+    async (base64Image: string, mode: PhotoMode, photoId: string) => {
       if (!user?.id || !propertyId) return;
 
       try {
-        if (photoId) {
-          await updateHdrSession(photoId, { hdrImageDataUrl: image, status: "done", mode });
-        } else {
-          const newPhotoId = `photo_${Date.now()}`;
-          await createHdrSession({ userId: user.id, propertyId, imagesCount: 1, mode, id: newPhotoId });
-          await updateHdrSession(newPhotoId, { hdrImageDataUrl: image, status: "done", mode });
-        }
+        // 1. Upload da imagem para o Supabase Storage
+        const imageUrl = await uploadHdrImage(user.id, photoId, base64Image);
+        
+        // 2. Atualizar a sessão HDR com a URL da imagem
+        await updateHdrSession(photoId, { hdrImageUrl: imageUrl, status: "done", mode });
       } catch (error) {
         console.error("Failed to save photo:", error);
         toast.error("Falha ao salvar a foto.");
+        await updateHdrSession(photoId, { status: "error", errorMessage: (error as Error).message });
       }
     },
     [user?.id, propertyId]
@@ -120,20 +113,18 @@ export default function CameraCapture() {
   const processHDRInBackground = useCallback(
     async (
       photoId: string,
-      bracketIds: string[],
+      _bracketIds: string[], // Não mais usado para armazenamento local
       mode: "hp_hdr_exterior" | "hp_hdr_window",
-      base64Image: string
+      base64Image: string // Imagem base64 para processamento AI
     ) => {
       if (!user?.id || !propertyId) return;
       try {
-        const final = await aiService.enhanceBrackets(bracketIds, mode, { scene: sceneMode }, base64Image);
-        await onSmartSave(final, mode, photoId);
+        const finalHdrBase64 = await aiService.enhanceBrackets(_bracketIds, mode, { scene: sceneMode }, base64Image);
+        await onSmartSave(finalHdrBase64, mode, photoId);
       } catch (e) {
         console.error("HDR processing failed:", e);
         await updateHdrSession(photoId, { status: "error", errorMessage: (e as Error).message });
         toast.error("Falha ao processar HDR.");
-      } finally {
-        for (const id of bracketIds) bracketStorage.deleteBracket(id);
       }
     },
     [propertyId, sceneMode, user?.id, onSmartSave]
@@ -173,6 +164,9 @@ export default function CameraCapture() {
     if (!propertyId || processing || !user?.id) return;
 
     setProcessing("A CAPTURAR FOTO...");
+    const photoId = `photo_${Date.now()}`;
+    const mode = sceneMode === "exterior" ? "hp_hdr_exterior" : "hp_hdr_window";
+
     try {
       const track = trackRef.current;
       if (!track) throw new Error("Câmara não pronta");
@@ -182,8 +176,8 @@ export default function CameraCapture() {
 
       const dataUrl = await captureFrame();
       if (dataUrl) {
-        const mode = sceneMode === "exterior" ? "hp_hdr_exterior" : "hp_hdr_window";
-        await onSmartSave(dataUrl, mode);
+        await createHdrSession({ userId: user.id, propertyId, imagesCount: 1, mode, id: photoId });
+        await onSmartSave(dataUrl, mode, photoId);
         toast.success("Foto guardada!");
         navigate(-1);
       }
@@ -191,8 +185,7 @@ export default function CameraCapture() {
       console.error(e);
       toast.error("Falha ao capturar foto.");
       if (propertyId && user?.id) {
-        const photoId = `photo_${Date.now()}`;
-        await createHdrSession({ userId: user.id, propertyId, imagesCount: 1, mode: sceneMode === "exterior" ? "hp_hdr_exterior" : "hp_hdr_window", id: photoId });
+        await createHdrSession({ userId: user.id, propertyId, imagesCount: 1, mode, id: photoId });
         await updateHdrSession(photoId, { status: "error", errorMessage: (e as Error).message });
       }
     } finally {
@@ -205,8 +198,8 @@ export default function CameraCapture() {
     if (!propertyId || processing || !user?.id) return;
 
     setProcessing("A CAPTURAR HDR...");
-    const ids: string[] = [];
-    let capturedBase64Image: string | null = null;
+    const ids: string[] = []; // Ainda útil para rastrear o número de brackets
+    let capturedBase64Image: string | null = null; // Imagem do meio para processamento AI
 
     try {
       const video = videoRef.current;
@@ -218,10 +211,13 @@ export default function CameraCapture() {
       const supportsExposure = capabilities.exposureCompensation || capabilities.exposureMode;
 
       if (!supportsExposure) {
+        // Fallback para captura única se não houver suporte a EV
         const dataUrl = await captureFrame();
         if (dataUrl) {
             const mode = sceneMode === "exterior" ? "hp_hdr_exterior" : "hp_hdr_window";
-            await onSmartSave(dataUrl, mode);
+            const photoId = `photo_${Date.now()}`;
+            await createHdrSession({ userId: user.id, propertyId, imagesCount: 1, mode, id: photoId });
+            await onSmartSave(dataUrl, mode, photoId);
             toast.success("Foto guardada!");
             navigate(-1);
         }
@@ -246,12 +242,9 @@ export default function CameraCapture() {
 
         const dataUrl = await captureFrame();
         if (dataUrl) {
-            const id = `bracket_${Date.now()}_${i}`;
-            const blob = await dataUrlToBlob(dataUrl);
-            await bracketStorage.saveBracket(id, blob);
-            ids.push(id);
+            ids.push(`bracket_${Date.now()}_${i}`); // Apenas para contagem, não para armazenamento local
             if (i === Math.floor(EV_STEPS.length / 2)) {
-              capturedBase64Image = dataUrl;
+              capturedBase64Image = dataUrl; // Salva a imagem do meio para processamento AI
             }
         }
       }
@@ -261,18 +254,12 @@ export default function CameraCapture() {
       if (ids.length === 0) throw new Error("Nenhum frame capturado");
       if (!capturedBase64Image) throw new Error("Imagem para processamento HDR não capturada.");
       
-      const midId = ids[Math.floor(ids.length / 2)];
-      const previewBlob = await bracketStorage.getBracket(midId);
+      // Salva a imagem do meio como preview e inicia o processamento HDR em segundo plano
+      await onSmartSave(capturedBase64Image, mode, photoId);
+      toast.success("Foto guardada! A processar HDR...");
+      processHDRInBackground(photoId, ids, mode, capturedBase64Image); // Passa a imagem base64 para o AI
+      navigate(-1);
       
-      if (previewBlob) {
-        const previewUrl = URL.createObjectURL(previewBlob);
-        
-        await onSmartSave(previewUrl, mode, photoId);
-        
-        toast.success("Foto guardada! A processar HDR...");
-        processHDRInBackground(photoId, [...ids], mode, capturedBase64Image);
-        navigate(-1);
-      }
     } catch (e) {
       console.error(e);
       toast.error("Falha na captura HDR.");
@@ -307,7 +294,7 @@ export default function CameraCapture() {
         bracketIndex={bracketIndex}
         evStepsLength={EV_STEPS.length}
         uiRotateStyle={uiRotateStyle}
-        videoRotateStyle={videoRotateStyle} // Passando o novo estilo para o CameraViewfinder
+        videoRotateStyle={videoRotateStyle}
       />
 
       <CameraControls

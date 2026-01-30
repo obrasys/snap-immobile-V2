@@ -139,9 +139,13 @@ export default function PropertyDetail() {
                       {new Date(s.createdAt).toLocaleString("pt-BR")}
                     </div>
                   </div>
-                  <div className="text-xs font-semibold text-muted-foreground">
-                    {s.status}
-                  </div>
+                  {s.hdrImageUrl ? (
+                    <img src={s.hdrImageUrl} alt="HDR Session" className="w-20 h-16 object-cover rounded-lg" />
+                  ) : (
+                    <div className="text-xs font-semibold text-muted-foreground">
+                      {s.status}
+                    </div>
+                  )}
                 </div>
               </Card>
             ))

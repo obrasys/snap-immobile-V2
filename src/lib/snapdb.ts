@@ -2,6 +2,7 @@ import { startOfMonth } from "date-fns";
 import type { HDRSession, PhotoMode, Property, User, UserPlan, UserRole } from "@/lib/models";
 import { hasSupabase, supabase } from "@/lib/supabaseClient";
 import * as local from "@/lib/snapdb.local";
+import { dataUrlToBlob, getMimeType } from "@/utils/helpers"; // Importar helpers para blob e mime type
 
 function nowIso() {
   return new Date().toISOString();
@@ -273,7 +274,7 @@ export async function listSessions(propertyId: string): Promise<HDRSession[]> {
 
   const { data, error } = await supabase
     .from("hdr_sessions")
-    .select("id, property_id, images_count, hdr_image_data_url, status, error_message, created_at, mode")
+    .select("id, property_id, images_count, hdr_image_url, status, error_message, created_at, mode") // Renomeado hdr_image_data_url para hdr_image_url
     .eq("property_id", propertyId)
     .order("created_at", { ascending: false });
 
@@ -284,7 +285,7 @@ export async function listSessions(propertyId: string): Promise<HDRSession[]> {
       id: s.id,
       propertyId: s.property_id,
       imagesCount: s.images_count,
-      hdrImageDataUrl: s.hdr_image_data_url ?? undefined,
+      hdrImageUrl: s.hdr_image_url ?? undefined, // Renomeado hdrImageDataUrl para hdrImageUrl
       status: s.status,
       errorMessage: s.error_message ?? undefined,
       createdAt: s.created_at,
@@ -337,7 +338,7 @@ export async function createHdrSession(args: {
       status: "processing",
       mode: args.mode, // Salvar o modo
     })
-    .select("id, property_id, images_count, hdr_image_data_url, status, error_message, created_at, mode")
+    .select("id, property_id, images_count, hdr_image_url, status, error_message, created_at, mode") // Selecionar hdr_image_url
     .single();
 
   if (error) throw new Error(error.message);
@@ -346,7 +347,7 @@ export async function createHdrSession(args: {
     id: data.id,
     propertyId: data.property_id,
     imagesCount: data.images_count,
-    hdrImageDataUrl: data.hdr_image_data_url ?? undefined,
+    hdrImageUrl: data.hdr_image_url ?? undefined, // Mapear para hdrImageUrl
     status: data.status,
     errorMessage: data.error_message ?? undefined,
     createdAt: data.created_at,
@@ -359,13 +360,40 @@ export async function updateHdrSession(sessionId: string, patch: Partial<HDRSess
 
   const mapped: Record<string, unknown> = {};
   if (typeof patch.status !== "undefined") mapped.status = patch.status;
-  if (typeof patch.hdrImageDataUrl !== "undefined") mapped.hdr_image_data_url = patch.hdrImageDataUrl;
+  if (typeof patch.hdrImageUrl !== "undefined") mapped.hdr_image_url = patch.hdrImageUrl; // Renomeado para hdr_image_url
   if (typeof patch.errorMessage !== "undefined") mapped.error_message = patch.errorMessage;
   if (typeof patch.mode !== "undefined") mapped.mode = patch.mode;
 
   const { error } = await supabase.from("hdr_sessions").update(mapped).eq("id", sessionId);
   if (error) throw new Error(error.message);
 }
+
+export async function uploadHdrImage(userId: string, sessionId: string, base64Image: string): Promise<string> {
+  if (!hasSupabase) throw new Error("Supabase não configurado para upload de imagens.");
+
+  const blob = dataUrlToBlob(base64Image);
+  const mimeType = getMimeType(base64Image);
+  const filePath = `${userId}/${sessionId}.${mimeType.split('/')[1] || 'jpeg'}`; // Ex: userId/sessionId.jpeg
+
+  const { data, error } = await supabase.storage
+    .from('snap-immobile-photos')
+    .upload(filePath, blob, {
+      contentType: mimeType,
+      upsert: true, // Sobrescreve se o arquivo já existir
+    });
+
+  if (error) throw new Error(`Falha ao fazer upload da imagem: ${error.message}`);
+
+  // Obter a URL pública da imagem
+  const { data: publicUrlData } = supabase.storage
+    .from('snap-immobile-photos')
+    .getPublicUrl(filePath);
+
+  if (!publicUrlData?.publicUrl) throw new Error("Falha ao obter URL pública da imagem.");
+
+  return publicUrlData.publicUrl;
+}
+
 
 export async function upgradePlan(userId: string, plan: UserPlan) {
   if (!hasSupabase) return local.upgradePlan(userId, plan);
