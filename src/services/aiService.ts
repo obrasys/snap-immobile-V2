@@ -2,19 +2,16 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { cleanBase64, getMimeType } from "@/utils/helpers";
 import type { PhotoMode } from "@/lib/models";
 
-// Detecção segura da API Key para ambiente Vite
-const getApiKey = () => {
-  // @ts-ignore
-  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) {
-    // @ts-ignore
-    return import.meta.env.VITE_GEMINI_API_KEY;
-  }
-  console.error("CRITICAL: Gemini API Key not found. Check .env file (VITE_GEMINI_API_KEY)");
-  return "";
-};
+// A chave da API do Gemini será injetada pelo Vite através da configuração 'define' em vite.config.ts
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
-const apiKey = getApiKey();
-const ai = new GoogleGenerativeAI(apiKey);
+if (!apiKey) {
+  console.error("CRITICAL: Gemini API Key not found. Ensure VITE_GEMINI_API_KEY is set in environment variables.");
+  // Em um ambiente de produção, você pode querer lançar um erro ou desabilitar a funcionalidade de IA.
+  // Por enquanto, vamos retornar uma instância de AI que lançará erros se usada sem chave.
+}
+
+const ai = new GoogleGenerativeAI(apiKey || "dummy-api-key-if-missing"); // Fornece uma chave dummy para evitar erro de inicialização se apiKey for undefined
 
 // --- MÉTODOS DE SERVIÇO ---
 

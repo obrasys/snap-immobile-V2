@@ -15,4 +15,7 @@ export default defineConfig(() => ({
     },
   },
   envPrefix: 'VITE_', // Adicionado para garantir que as variáveis de ambiente com prefixo VITE_ sejam carregadas
+  define: {
+    'import.meta.env.VITE_GEMINI_API_KEY': JSON.stringify(process.env.VITE_GEMINI_API_KEY),
+  },
 }));
