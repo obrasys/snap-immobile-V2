@@ -1,6 +1,5 @@
 import type { User, UserPlan, UserRole } from "@/lib/models";
 import { supabase } from "@/integrations/supabase/client";
-import { nowIso } from "@/utils/db";
 
 export const planLimits: Record<UserPlan, { hdrPerMonth: number }> = {
   free: { hdrPerMonth: 15 },
@@ -9,9 +8,10 @@ export const planLimits: Record<UserPlan, { hdrPerMonth: number }> = {
 
 export async function getProfile(userId: string) {
   console.log(`[profileService] Fetching profile for userId: ${userId}`);
+  // Removemos updated_at/created_at da seleção para evitar erros de coluna inexistente
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, first_name, last_name, email, phone, cpf, company, role, plan, avatar_url, updated_at")
+    .select("id, first_name, last_name, email, phone, cpf, company, role, plan, avatar_url")
     .eq("id", userId)
     .maybeSingle();
 
@@ -19,7 +19,6 @@ export async function getProfile(userId: string) {
     console.error("[profileService] Error fetching profile:", error);
     throw error;
   }
-  console.log(`[profileService] Profile data for ${userId}:`, data);
   return data;
 }
 
@@ -35,7 +34,7 @@ export async function upsertProfile(input: {
   plan: UserPlan;
   avatarUrl?: string;
 }) {
-  console.log("[profileService] Upserting profile for user:", input.id, "with data:", input);
+  console.log("[profileService] Upserting profile for user:", input.id);
   const { error } = await supabase.from("profiles").upsert({
     id: input.id,
     first_name: input.firstName,
@@ -47,21 +46,15 @@ export async function upsertProfile(input: {
     role: input.role,
     plan: input.plan,
     avatar_url: input.avatarUrl ?? "",
-    updated_at: nowIso(),
+    // Deixamos o banco de dados gerenciar as datas automaticamente
   });
   if (error) {
     console.error("[profileService] Error during profile upsert:", error);
     throw error;
   }
-  console.log("[profileService] Profile upserted successfully for user:", input.id);
 }
 
 export async function upgradePlan(userId: string, plan: UserPlan) {
-  console.log("[profileService] Upgrading plan for user:", userId, "to", plan);
   const { error } = await supabase.from("profiles").update({ plan }).eq("id", userId);
-  if (error) {
-    console.error("[profileService] Error upgrading plan:", error);
-    throw new Error(error.message);
-  }
-  console.log("[profileService] Plan upgraded successfully for user:", userId);
+  if (error) throw new Error(error.message);
 }

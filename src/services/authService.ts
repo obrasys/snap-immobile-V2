@@ -1,7 +1,6 @@
 import type { User, UserRole, UserPlan } from "@/lib/models";
 import { supabase, hasSupabase } from "@/integrations/supabase/client";
 import { getProfile } from "@/services/profileService";
-import { nowIso } from "@/utils/db";
 
 export async function getCurrentUser(): Promise<User | null> {
   if (!hasSupabase) return null;
@@ -12,13 +11,9 @@ export async function getCurrentUser(): Promise<User | null> {
   const au = authData.user;
   
   try {
-    // O perfil é criado automaticamente via Trigger no Supabase (handle_new_user)
     const profileData = await getProfile(au.id);
     
-    if (!profileData) {
-      console.warn("[authService] Perfil não encontrado para o usuário:", au.id);
-      return null;
-    }
+    if (!profileData) return null;
 
     return {
       id: au.id,
@@ -31,7 +26,7 @@ export async function getCurrentUser(): Promise<User | null> {
       role: (profileData.role as UserRole) || "corretor",
       plan: (profileData.plan as UserPlan) || "free",
       photoUrl: profileData.avatar_url ?? undefined,
-      createdAt: profileData.updated_at ?? nowIso(),
+      createdAt: new Date().toISOString(), // Fallback para data atual
     };
   } catch (e) {
     console.error("[authService] Erro ao carregar perfil:", e);

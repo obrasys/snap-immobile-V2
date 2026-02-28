@@ -16,37 +16,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createProperty } from "@/services/propertyService"; // Updated import
+import { createProperty } from "@/services/propertyService";
 import { showError, showSuccess } from "@/utils/toast";
 
 const STATES = [
-  "AC",
-  "AL",
-  "AP",
-  "AM",
-  "BA",
-  "CE",
-  "DF",
-  "ES",
-  "GO",
-  "MA",
-  "MT",
-  "MS",
-  "MG",
-  "PA",
-  "PB",
-  "PR",
-  "PE",
-  "PI",
-  "RJ",
-  "RN",
-  "RS",
-  "RO",
-  "RR",
-  "SC",
-  "SP",
-  "SE",
-  "TO",
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
 ];
 
 export function CreatePropertyDrawer({
@@ -92,12 +66,15 @@ export function CreatePropertyDrawer({
         .replace(/\s+/g, " ")
         .trim();
 
-      createProperty({ userId, name, address });
+      // Adicionado await para garantir a criação antes de prosseguir
+      await createProperty({ userId, name, address });
+      
       showSuccess("Imóvel criado com sucesso");
       resetForm();
       onCreated();
       onOpenChange(false);
-    } catch {
+    } catch (err) {
+      console.error("Erro ao criar imóvel:", err);
       showError("Erro ao criar imóvel");
     } finally {
       setLoading(false);
@@ -201,7 +178,7 @@ export function CreatePropertyDrawer({
                       type="submit"
                       className="h-11 w-full rounded-2xl bg-[hsl(var(--cta))] text-white hover:bg-[hsl(var(--cta))]/90"
                     >
-                      Guardar
+                      {loading ? "A guardar..." : "Guardar"}
                     </Button>
                   </div>
                 </form>
