@@ -6,7 +6,7 @@ import { useCamera } from "@/hooks/useCamera";
 import { CameraViewfinder } from "@/components/app/CameraViewfinder";
 import { CameraControls } from "@/components/app/CameraControls";
 import { aiService } from "@/services/aiService";
-import { createHdrSession, updateHdrSession, uploadHdrImage } from "@/services/hdrService"; // Updated import
+import { createHdrSession, updateHdrSession, uploadHdrImage } from "@/services/hdrService";
 import { useAuth } from "@/lib/auth";
 import type { PhotoMode } from "@/lib/models";
 
@@ -65,7 +65,7 @@ export default function CameraCapture() {
       }
     } else {
       w = screenWidth;
-      h = w * aspectRatio;
+      h = w / aspectRatio;
       if (h > screenHeight) {
         h = screenHeight;
         w = h / aspectRatio;
@@ -91,16 +91,16 @@ export default function CameraCapture() {
   }, []);
 
   const onSmartSave = useCallback(
-    async (base64Image: string, mode: PhotoMode, photoId: string) => {
+    async (base64Image: string, mode: PhotoMode, sessionId: string) => {
       if (!user?.id || !propertyId) return;
 
       try {
-        const imageUrl = await uploadHdrImage(user.id, photoId, base64Image);
-        await updateHdrSession(photoId, { hdrImageUrl: imageUrl, status: "done", mode });
+        const imageUrl = await uploadHdrImage(user.id, sessionId, base64Image);
+        await updateHdrSession(sessionId, { hdrImageUrl: imageUrl, status: "done", mode });
       } catch (error) {
         console.error("Failed to save photo:", error);
         toast.error("Falha ao salvar a foto.");
-        await updateHdrSession(photoId, { status: "error", errorMessage: (error as Error).message });
+        await updateHdrSession(sessionId, { status: "error", errorMessage: (error as Error).message });
       }
     },
     [user?.id, propertyId]
@@ -108,7 +108,7 @@ export default function CameraCapture() {
 
   const processHDRInBackground = useCallback(
     async (
-      photoId: string,
+      sessionId: string,
       _bracketIds: string[],
       mode: "hp_hdr_exterior" | "hp_hdr_window",
       base64Image: string
@@ -116,10 +116,10 @@ export default function CameraCapture() {
       if (!user?.id || !propertyId) return;
       try {
         const finalHdrBase64 = await aiService.enhanceBrackets(_bracketIds, mode, { scene: sceneMode }, base64Image);
-        await onSmartSave(finalHdrBase64, mode, photoId);
+        await onSmartSave(finalHdrBase64, mode, sessionId);
       } catch (e) {
         console.error("HDR processing failed:", e);
-        await updateHdrSession(photoId, { status: "error", errorMessage: (e as Error).message });
+        await updateHdrSession(sessionId, { status: "error", errorMessage: (e as Error).message });
         toast.error("Falha ao processar HDR.");
       }
     },
@@ -160,7 +160,6 @@ export default function CameraCapture() {
     if (!propertyId || processing || !user?.id) return;
 
     setProcessing("A CAPTURAR FOTO...");
-    const photoId = `photo_${Date.now()}`;
     const mode = sceneMode === "exterior" ? "hp_hdr_exterior" : "hp_hdr_window";
 
     try {
@@ -169,8 +168,8 @@ export default function CameraCapture() {
 
       const dataUrl = await captureFrame();
       if (dataUrl) {
-        await createHdrSession({ userId: user.id, propertyId, imagesCount: 1, mode, id: photoId });
-        await onSmartSave(dataUrl, mode, photoId);
+        const session = await createHdrSession({ userId: user.id, propertyId, imagesCount: 1, mode });
+        await onSmartSave(dataUrl, mode, session.id);
         toast.success("Foto guardada!");
         navigate(-1);
       } else {
@@ -179,10 +178,6 @@ export default function CameraCapture() {
     } catch (e) {
       console.error(e);
       toast.error("Falha ao capturar foto.");
-      if (propertyId && user?.id) {
-        await createHdrSession({ userId: user.id, propertyId, imagesCount: 1, mode, id: photoId });
-        await updateHdrSession(photoId, { status: "error", errorMessage: (e as Error).message });
-      }
     } finally {
       setProcessing(null);
       applyExposureCompensation(manualEv);
@@ -197,7 +192,6 @@ export default function CameraCapture() {
     let capturedBase64Image: string | null = null;
 
     const mode: PhotoMode = sceneMode === "exterior" ? "hp_hdr_exterior" : "hp_hdr_window";
-    const photoId = `photo_${Date.now()}`;
 
     try {
       const track = trackRef.current;
@@ -205,21 +199,19 @@ export default function CameraCapture() {
 
       if (!supportsExposureCompensation) {
         toast.warning("Seu dispositivo não suporta bracketing de exposição. Capturando uma única foto.");
-        await createHdrSession({ userId: user.id, propertyId, imagesCount: 1, mode, id: photoId });
+        const session = await createHdrSession({ userId: user.id, propertyId, imagesCount: 1, mode });
         await applyExposureCompensation(manualEv);
         await new Promise(r => setTimeout(r, 300));
         const dataUrl = await captureFrame();
         if (dataUrl) {
-          await onSmartSave(dataUrl, mode, photoId);
+          await onSmartSave(dataUrl, mode, session.id);
           toast.success("Foto guardada!");
           navigate(-1);
-        } else {
-          throw new Error("Nenhum frame capturado no fallback.");
         }
         return;
       }
 
-      await createHdrSession({ userId: user.id, propertyId, imagesCount: EV_STEPS.length, mode, id: photoId });
+      const session = await createHdrSession({ userId: user.id, propertyId, imagesCount: EV_STEPS.length, mode });
 
       for (let i = 0; i < EV_STEPS.length; i++) {
         setBracketIndex(i);
@@ -245,18 +237,14 @@ export default function CameraCapture() {
       if (ids.length === 0) throw new Error("Nenhum frame capturado para HDR.");
       if (!capturedBase64Image) throw new Error("Imagem central para processamento HDR não capturada.");
 
-      await onSmartSave(capturedBase64Image, mode, photoId);
+      await onSmartSave(capturedBase64Image, mode, session.id);
       toast.success("Foto guardada! A processar HDR...");
-      processHDRInBackground(photoId, ids, mode, capturedBase64Image);
+      processHDRInBackground(session.id, ids, mode, capturedBase64Image);
       navigate(-1);
 
     } catch (e) {
       console.error(e);
       toast.error("Falha na captura HDR.");
-      if (propertyId && user?.id) {
-        await createHdrSession({ userId: user.id, propertyId, imagesCount: 0, mode, id: photoId });
-        await updateHdrSession(photoId, { status: "error", errorMessage: (e as Error).message });
-      }
     } finally {
       setProcessing(null);
       setBracketIndex(null);
