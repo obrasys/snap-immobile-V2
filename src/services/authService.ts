@@ -31,7 +31,7 @@ export async function getCurrentUser(): Promise<User | null> {
       role: (profileData.role as UserRole) || "corretor",
       plan: (profileData.plan as UserPlan) || "free",
       photoUrl: profileData.avatar_url ?? undefined,
-      createdAt: profileData.created_at ?? nowIso(),
+      createdAt: profileData.updated_at ?? nowIso(),
     };
   } catch (e) {
     console.error("[authService] Erro ao carregar perfil:", e);

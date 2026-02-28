@@ -11,7 +11,7 @@ export async function getProfile(userId: string) {
   console.log(`[profileService] Fetching profile for userId: ${userId}`);
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, first_name, last_name, email, phone, cpf, company, role, plan, avatar_url, created_at")
+    .select("id, first_name, last_name, email, phone, cpf, company, role, plan, avatar_url, updated_at")
     .eq("id", userId)
     .maybeSingle();
 
