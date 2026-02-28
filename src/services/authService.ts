@@ -13,7 +13,6 @@ export async function getCurrentUser(): Promise<User | null> {
   
   try {
     // O perfil é criado automaticamente via Trigger no Supabase (handle_new_user)
-    // Portanto, apenas buscamos os dados.
     const profileData = await getProfile(au.id);
     
     if (!profileData) {
@@ -29,8 +28,8 @@ export async function getCurrentUser(): Promise<User | null> {
       phone: profileData.phone ?? "",
       cpf: profileData.cpf ?? "",
       company: profileData.company ?? "",
-      role: (profileData.role as UserRole) ?? "corretor",
-      plan: (profileData.plan as UserPlan) ?? "free",
+      role: (profileData.role as UserRole) || "corretor",
+      plan: (profileData.plan as UserPlan) || "free",
       photoUrl: profileData.avatar_url ?? undefined,
       createdAt: profileData.created_at ?? nowIso(),
     };
