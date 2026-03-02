@@ -1,6 +1,6 @@
 import type { User, UserRole, UserPlan } from "@/lib/models";
 import { supabase, hasSupabase } from "@/integrations/supabase/client";
-import { getProfile } from "@/services/profileService";
+import { getProfile, upsertProfile } from "@/services/profileService";
 
 export async function getCurrentUser(): Promise<User | null> {
   if (!hasSupabase) return null;
@@ -9,11 +9,29 @@ export async function getCurrentUser(): Promise<User | null> {
   if (authError || !authData.user) return null;
 
   const au = authData.user;
-  
+
   try {
-    const profileData = await getProfile(au.id);
-    
-    if (!profileData) return null;
+    let profileData = await getProfile(au.id);
+
+    // Se o usuário existe no Auth mas ainda não tem linha em profiles,
+    // criamos automaticamente para evitar travar o app no login.
+    if (!profileData) {
+      const meta: any = au.user_metadata ?? {};
+      await upsertProfile({
+        id: au.id,
+        firstName: meta.first_name ?? meta.name ?? "Usuário",
+        lastName: meta.last_name ?? "",
+        email: au.email ?? "",
+        phone: "",
+        cpf: "",
+        company: "",
+        role: "corretor" as UserRole,
+        plan: "free" as UserPlan,
+        avatarUrl: "",
+      });
+      profileData = await getProfile(au.id);
+      if (!profileData) return null;
+    }
 
     return {
       id: au.id,
@@ -26,7 +44,7 @@ export async function getCurrentUser(): Promise<User | null> {
       role: (profileData.role as UserRole) || "corretor",
       plan: (profileData.plan as UserPlan) || "free",
       photoUrl: profileData.avatar_url ?? undefined,
-      createdAt: new Date().toISOString(), // Fallback para data atual
+      createdAt: new Date().toISOString(),
     };
   } catch (e) {
     console.error("[authService] Erro ao carregar perfil:", e);
