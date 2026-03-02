@@ -26,7 +26,7 @@ export type Property = {
 
 export type HDRSessionStatus = "processing" | "done" | "error";
 
-export type PhotoMode = "hp_hdr_exterior" | "hp_hdr_window" | "hp_panorama";
+export type PhotoMode = "hp_hdr_interior" | "hp_hdr_exterior" | "hp_hdr_window" | "hp_panorama";
 
 export type HDRSession = {
   id: string;
