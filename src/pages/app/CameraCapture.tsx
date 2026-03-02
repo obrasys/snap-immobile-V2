@@ -1,298 +1,265 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { X, Home, Image as ImageIcon, Zap } from "lucide-react";
 import { toast } from "sonner";
-import { useOrientationAngle } from "@/hooks/use-orientation-angle";
-import { useCamera } from "@/hooks/useCamera";
-import { CameraViewfinder } from "@/components/app/CameraViewfinder";
-import { CameraControls } from "@/components/app/CameraControls";
+import { useAuth } from "@/lib/auth";
 import { aiService } from "@/services/aiService";
 import { createHdrSession, updateHdrSession, uploadHdrImage } from "@/services/hdrService";
-import { useAuth } from "@/lib/auth";
-import type { PhotoMode } from "@/lib/models";
 
-const EV_STEPS = [-4, -3, -2, -1, 0, 1, 2, 3, 4]; // 9 exposições
-const SHUTTER_SOUND =
-  "data:audio/mp3;base64,//uQZAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//sQxAADgnABuQAAAgAEAAP//wAABAAEAAA=";
-
-type CaptureMode = "single" | "hdr";
+const SHUTTER_SOUND = "https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3";
 
 export default function CameraCapture() {
   const navigate = useNavigate();
-  const { id: propertyId } = useParams<{ id: string }>();
+  const { id: propertyId } = useParams();
   const { user } = useAuth();
-  const { angle } = useOrientationAngle();
 
-  const {
-    videoRef,
-    trackRef,
-    cameraError,
-    setCameraError,
-    zoomPreset,
-    handleZoomPreset,
-    manualEv,
-    setManualEv,
-    minEv,
-    maxEv,
-    applyExposureCompensation,
-    supportsExposureCompensation,
-  } = useCamera();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const shutterRef = useRef<HTMLAudioElement>(new Audio(SHUTTER_SOUND));
 
-  const shutter = React.useRef<HTMLAudioElement>(new Audio(SHUTTER_SOUND));
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState("");
+  const [processingProgress, setProcessingProgress] = useState(0);
+  const [hdrProfile, setHdrProfile] = useState<"interior" | "exterior">("interior");
+  const [zoom, setZoom] = useState(1);
+  const [tilt, setTilt] = useState({ beta: 0, gamma: 0 });
+  const [capturedPreviews, setCapturedPreviews] = useState<{ url: string; ev: string }[]>([]);
+  const [flashVisual, setFlashVisual] = useState(false);
 
-  const [windowSize, setWindowSize] = useState({ w: window.innerWidth, h: window.innerHeight });
-  const [sceneMode, setSceneMode] = useState<"interior" | "exterior">("interior");
-  const [captureMode, setCaptureMode] = useState<CaptureMode>("hdr");
-
-  const [processing, setProcessing] = useState<string | null>(null);
-  const [bracketIndex, setBracketIndex] = useState<number | null>(null);
-
-  const [showGrid, setShowGrid] = useState(true);
-
-  const isLandscape = windowSize.w > windowSize.h;
-
-  const viewfinderDim = useMemo(() => {
-    const aspectRatio = 4 / 3;
-    const screenWidth = windowSize.w;
-    const screenHeight = windowSize.h;
-
-    let w, h;
-    if (isLandscape) {
-      h = screenHeight;
-      w = h * aspectRatio;
-      if (w > screenWidth) {
-        w = screenWidth;
-        h = w / aspectRatio;
-      }
-    } else {
-      w = screenWidth;
-      h = w / aspectRatio;
-      if (h > screenHeight) {
-        h = screenHeight;
-        w = h / aspectRatio;
-      }
-    }
-    return { w, h };
-  }, [windowSize, isLandscape]);
-
-  const uiRotateStyle = useMemo(() => {
-    return { transform: `rotate(${-angle}deg)` };
-  }, [angle]);
-
-  const videoRotateStyle = useMemo(() => {
-    return { transform: `rotate(${angle}deg)` };
-  }, [angle]);
-
+  // Orientação e Nível
   useEffect(() => {
-    const onResize = () => setWindowSize({ w: window.innerWidth, h: window.innerHeight });
-    window.addEventListener("resize", onResize);
+    const handleOrientation = (e: DeviceOrientationEvent) => {
+      if (e.beta !== null && e.gamma !== null) setTilt({ beta: e.beta, gamma: e.gamma });
+    };
+    window.addEventListener("deviceorientation", handleOrientation);
+    startCamera();
     return () => {
-      window.removeEventListener("resize", onResize);
+      window.removeEventListener("deviceorientation", handleOrientation);
+      stopCamera();
     };
   }, []);
 
-  const onSmartSave = useCallback(
-    async (base64Image: string, mode: PhotoMode, sessionId: string) => {
-      if (!user?.id || !propertyId) return;
+  const isLevel = Math.abs(tilt.gamma) < 2;
 
-      try {
-        const imageUrl = await uploadHdrImage(user.id, sessionId, base64Image);
-        await updateHdrSession(sessionId, { hdrImageUrl: imageUrl, status: "done", mode });
-      } catch (error) {
-        console.error("Failed to save photo:", error);
-        toast.error("Falha ao salvar a foto.");
-        await updateHdrSession(sessionId, { status: "error", errorMessage: (error as Error).message });
-      }
-    },
-    [user?.id, propertyId]
-  );
-
-  const processHDRInBackground = useCallback(
-    async (
-      sessionId: string,
-      _bracketIds: string[],
-      mode: "hp_hdr_exterior" | "hp_hdr_window",
-      base64Image: string
-    ) => {
-      if (!user?.id || !propertyId) return;
-      try {
-        const finalHdrBase64 = await aiService.enhanceBrackets(_bracketIds, mode, { scene: sceneMode }, base64Image);
-        await onSmartSave(finalHdrBase64, mode, sessionId);
-      } catch (e) {
-        console.error("HDR processing failed:", e);
-        await updateHdrSession(sessionId, { status: "error", errorMessage: (e as Error).message });
-        toast.error("Falha ao processar HDR.");
-      }
-    },
-    [propertyId, sceneMode, user?.id, onSmartSave]
-  );
-
-  const captureFrame = async (): Promise<string | null> => {
-    const video = videoRef.current;
-    if (!video) return null;
-
-    shutter.current.currentTime = 0;
-    shutter.current.play().catch(() => {});
-
-    const canvas = document.createElement("canvas");
-    canvas.width = viewfinderDim.w;
-    canvas.height = viewfinderDim.h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-
-    const videoAspectRatio = video.videoWidth / video.videoHeight;
-    const targetAspectRatio = 4 / 3;
-
-    let sx = 0, sy = 0, sWidth = video.videoWidth, sHeight = video.videoHeight;
-
-    if (videoAspectRatio > targetAspectRatio) {
-      sWidth = video.videoHeight * targetAspectRatio;
-      sx = (video.videoWidth - sWidth) / 2;
-    } else if (videoAspectRatio < targetAspectRatio) {
-      sHeight = video.videoWidth / targetAspectRatio;
-      sy = (video.videoHeight - sHeight) / 2;
-    }
-
-    ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.95);
-  };
-
-  const takeSinglePhoto = async () => {
-    if (!propertyId || processing || !user?.id) return;
-
-    setProcessing("A CAPTURAR FOTO...");
-    const mode = sceneMode === "exterior" ? "hp_hdr_exterior" : "hp_hdr_window";
-
+  const startCamera = async () => {
     try {
-      await applyExposureCompensation(manualEv);
-      await new Promise(r => setTimeout(r, 300));
-
-      const dataUrl = await captureFrame();
-      if (dataUrl) {
-        const session = await createHdrSession({ userId: user.id, propertyId, imagesCount: 1, mode });
-        await onSmartSave(dataUrl, mode, session.id);
-        toast.success("Foto guardada!");
-        navigate(-1);
-      } else {
-        throw new Error("Nenhum frame capturado.");
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "environment",
+          width: { ideal: 2560 },
+          height: { ideal: 1920 },
+          aspectRatio: { ideal: 1.333333 }
+        }
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        setIsStreaming(true);
       }
-    } catch (e) {
-      console.error(e);
-      toast.error("Falha ao capturar foto.");
-    } finally {
-      setProcessing(null);
-      applyExposureCompensation(manualEv);
+    } catch (err) {
+      toast.error("Erro ao acessar a câmera.");
     }
   };
 
-  const runHDR = async () => {
-    if (!propertyId || processing || !user?.id) return;
-
-    setProcessing("A CAPTURAR HDR...");
-    const ids: string[] = [];
-    let capturedBase64Image: string | null = null;
-
-    const mode: PhotoMode = sceneMode === "exterior" ? "hp_hdr_exterior" : "hp_hdr_window";
-
-    try {
-      const track = trackRef.current;
-      if (!track) throw new Error("Câmara não pronta");
-
-      if (!supportsExposureCompensation) {
-        toast.warning("Seu dispositivo não suporta bracketing de exposição. Capturando uma única foto.");
-        const session = await createHdrSession({ userId: user.id, propertyId, imagesCount: 1, mode });
-        await applyExposureCompensation(manualEv);
-        await new Promise(r => setTimeout(r, 300));
-        const dataUrl = await captureFrame();
-        if (dataUrl) {
-          await onSmartSave(dataUrl, mode, session.id);
-          toast.success("Foto guardada!");
-          navigate(-1);
-        }
-        return;
-      }
-
-      const session = await createHdrSession({ userId: user.id, propertyId, imagesCount: EV_STEPS.length, mode });
-
-      for (let i = 0; i < EV_STEPS.length; i++) {
-        setBracketIndex(i);
-        try {
-          await track.applyConstraints({ advanced: [{ exposureCompensation: EV_STEPS[i] }] } as any);
-          await new Promise(r => setTimeout(r, 650));
-        } catch (e) {
-            console.warn("[CameraCapture] Exposure constraints failed for frame", i, e);
-            continue;
-        }
-
-        const dataUrl = await captureFrame();
-        if (dataUrl) {
-            ids.push(`bracket_${Date.now()}_${i}`);
-            if (i === Math.floor(EV_STEPS.length / 2)) {
-              capturedBase64Image = dataUrl;
-            }
-        }
-      }
-
-      await applyExposureCompensation(manualEv);
-
-      if (ids.length === 0) throw new Error("Nenhum frame capturado para HDR.");
-      if (!capturedBase64Image) throw new Error("Imagem central para processamento HDR não capturada.");
-
-      await onSmartSave(capturedBase64Image, mode, session.id);
-      toast.success("Foto guardada! A processar HDR...");
-      processHDRInBackground(session.id, ids, mode, capturedBase64Image);
-      navigate(-1);
-
-    } catch (e) {
-      console.error(e);
-      toast.error("Falha na captura HDR.");
-    } finally {
-      setProcessing(null);
-      setBracketIndex(null);
-      applyExposureCompensation(manualEv);
+  const stopCamera = () => {
+    if (videoRef.current?.srcObject) {
+      (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
     }
   };
 
-  const handleMainCapture = () => {
-    if (captureMode === "single") {
-      takeSinglePhoto();
+  const handleZoom = async (level: number) => {
+    setZoom(level);
+    const track = (videoRef.current?.srcObject as MediaStream)?.getVideoTracks()[0];
+    if (track) {
+      const caps: any = track.getCapabilities();
+      if (caps.zoom) track.applyConstraints({ advanced: [{ zoom: level }] } as any);
+    }
+  };
+
+  const drawFrame = (ctx: CanvasRenderingContext2D, video: HTMLVideoElement, canvas: HTMLCanvasElement) => {
+    const targetRatio = 4 / 3;
+    const videoRatio = video.videoWidth / video.videoHeight;
+    let sw = video.videoWidth, sh = video.videoHeight, sx = 0, sy = 0;
+
+    if (videoRatio > targetRatio) {
+      sw = video.videoHeight * targetRatio;
+      sx = (video.videoWidth - sw) / 2;
     } else {
-      runHDR();
+      sh = video.videoWidth / targetRatio;
+      sy = (video.videoHeight - sh) / 2;
+    }
+
+    canvas.width = sw;
+    canvas.height = sh;
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+  };
+
+  const captureSequence = async () => {
+    if (!videoRef.current || !canvasRef.current || !user || !propertyId) return;
+    
+    setIsProcessing(true);
+    setCapturedPreviews([]);
+    setProcessingStep("Capturando 9 Exposições...");
+    setProcessingProgress(5);
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d")!;
+    const track = (video.srcObject as MediaStream).getVideoTracks()[0];
+    const caps: any = track.getCapabilities();
+
+    // Perfis de Exposição
+    const interiorEV = [1, 0.5, 0, -0.7, -1.3, -2, -2.7, -3.3, -4];
+    const exteriorEV = [2, 1.3, 0.7, 0, -0.3, -1, -1.7, -2.3, -3];
+    
+    // Detecção de Janela (Window)
+    let effectiveProfile: "hp_hdr_interior" | "hp_hdr_exterior" | "hp_hdr_window" = 
+      hdrProfile === "interior" ? "hp_hdr_interior" : "hp_hdr_exterior";
+
+    if (hdrProfile === "interior") {
+      drawFrame(ctx, video, canvas);
+      const topData = ctx.getImageData(0, 0, canvas.width, canvas.height * 0.3).data;
+      let brightPixels = 0;
+      for (let i = 0; i < topData.length; i += 16) {
+        if (topData[i] > 230 && topData[i+1] > 230 && topData[i+2] > 230) brightPixels++;
+      }
+      if (brightPixels / (topData.length / 16) > 0.15) effectiveProfile = "hp_hdr_window";
+    }
+
+    const evList = effectiveProfile === "hp_hdr_window" ? [-1, -2, -3, -4, -5, -6, -7, -8, -9] : (hdrProfile === "interior" ? interiorEV : exteriorEV);
+    let bestBase64 = "";
+
+    // Criar sessão no Supabase
+    const session = await createHdrSession({ 
+      userId: user.id, 
+      propertyId, 
+      imagesCount: 9, 
+      mode: effectiveProfile 
+    });
+
+    for (let i = 0; i < 9; i++) {
+      if (caps.exposureCompensation) {
+        await track.applyConstraints({ advanced: [{ exposureCompensation: evList[i] }] } as any);
+        await new Promise(r => setTimeout(r, 150));
+      }
+
+      shutterRef.current.play().catch(() => {});
+      setFlashVisual(true);
+      setTimeout(() => setFlashVisual(false), 50);
+
+      drawFrame(ctx, video, canvas);
+      const frameBase64 = canvas.toDataURL("image/jpeg", 0.7);
+      setCapturedPreviews(prev => [...prev, { url: frameBase64, ev: `${evList[i]}EV` }]);
+      
+      if (i === 4) bestBase64 = canvas.toDataURL("image/jpeg", 0.95);
+      setProcessingProgress(10 + (i * 5));
+    }
+
+    // Resetar exposição
+    if (caps.exposureCompensation) await track.applyConstraints({ advanced: [{ exposureCompensation: 0 }] } as any);
+
+    // Processamento AI
+    setProcessingStep("Processando HDR Pro...");
+    setProcessingProgress(60);
+    
+    try {
+      const enhanced = await aiService.enhanceImage(bestBase64, effectiveProfile);
+      setProcessingProgress(90);
+      
+      const publicUrl = await uploadHdrImage(user.id, session.id, enhanced);
+      await updateHdrSession(session.id, { hdrImageUrl: publicUrl, status: "done" });
+      
+      toast.success("Foto capturada com sucesso!");
+      navigate(-1);
+    } catch (err) {
+      console.error(err);
+      await updateHdrSession(session.id, { status: "error", errorMessage: "Erro na IA" });
+      toast.error("Erro ao processar imagem.");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex items-center justify-center overflow-hidden touch-none select-none">
-      <CameraViewfinder
-        videoRef={videoRef}
-        viewfinderDim={viewfinderDim}
-        showGrid={showGrid}
-        processing={processing}
-        cameraError={cameraError}
-        bracketIndex={bracketIndex}
-        evStepsLength={EV_STEPS.length}
-        uiRotateStyle={uiRotateStyle}
-        videoRotateStyle={videoRotateStyle}
-      />
+    <div className="fixed inset-0 bg-black z-50 flex flex-col overflow-hidden select-none">
+      {/* Viewfinder */}
+      <div className="flex-1 relative flex items-center justify-center">
+        <video ref={videoRef} autoPlay playsInline className="w-full aspect-[4/3] object-cover" />
+        <canvas ref={canvasRef} className="hidden" />
 
-      <CameraControls
-        uiRotateStyle={uiRotateStyle}
-        processing={processing}
-        cameraError={cameraError}
-        zoomPreset={zoomPreset}
-        handleZoomPreset={handleZoomPreset}
-        sceneMode={sceneMode}
-        setSceneMode={setSceneMode}
-        manualEv={manualEv}
-        setManualEv={setManualEv}
-        minEv={minEv}
-        maxEv={maxEv}
-        captureMode={captureMode}
-        setCaptureMode={setCaptureMode}
-        handleMainCapture={handleMainCapture}
-        showGrid={showGrid}
-        setShowGrid={setShowGrid}
-        supportsExposureCompensation={supportsExposureCompensation}
-      />
+        {/* Flash Effect */}
+        <div className={`absolute inset-0 bg-white transition-opacity duration-75 z-50 pointer-events-none ${flashVisual ? 'opacity-80' : 'opacity-0'}`} />
+
+        {/* Grid & Level */}
+        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+          <div className="w-full aspect-[4/3] relative border border-white/10">
+            <div className="grid grid-cols-3 grid-rows-3 w-full h-full opacity-20">
+              {[...Array(9)].map((_, i) => <div key={i} className="border border-white/40" />)}
+            </div>
+            {/* Level Indicator */}
+            <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-[2px] transition-colors ${isLevel ? 'bg-primary' : 'bg-white/40'}`} 
+                 style={{ transform: `translate(-50%, -50%) rotate(${tilt.gamma}deg)` }} />
+          </div>
+        </div>
+
+        {/* Zoom Controls */}
+        <div className="absolute bottom-32 left-1/2 -translate-x-1/2 flex gap-3 bg-black/40 p-2 rounded-full backdrop-blur-md border border-white/10">
+          {[0.5, 1, 2].map(z => (
+            <button key={z} onClick={() => handleZoom(z)} 
+                    className={`w-10 h-10 rounded-full text-xs font-bold transition-all ${zoom === z ? 'bg-primary text-white scale-110' : 'text-white/60'}`}>
+              {z}x
+            </button>
+          ))}
+        </div>
+
+        {/* Burst Previews */}
+        {capturedPreviews.length > 0 && (
+          <div className="absolute bottom-48 left-0 right-0 flex justify-center gap-1 px-4 h-12 overflow-hidden">
+            {capturedPreviews.map((p, i) => (
+              <img key={i} src={p.url} className="h-full aspect-[4/3] object-cover rounded-sm border border-white/20" />
+            ))}
+          </div>
+        )}
+
+        {/* Processing Overlay */}
+        {isProcessing && (
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-xl flex flex-col items-center justify-center z-50">
+            <div className="relative w-24 h-24 mb-4">
+              <svg className="w-full h-full -rotate-90">
+                <circle cx="48" cy="48" r="40" fill="none" stroke="white" strokeWidth="4" className="opacity-10" />
+                <circle cx="48" cy="48" r="40" fill="none" stroke="hsl(var(--primary))" strokeWidth="4" 
+                        strokeDasharray="251" strokeDashoffset={251 - (251 * processingProgress / 100)} 
+                        strokeLinecap="round" className="transition-all duration-300" />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center text-white font-bold">{processingProgress}%</div>
+            </div>
+            <p className="text-primary font-bold text-sm animate-pulse uppercase tracking-widest">{processingStep}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Controls */}
+      <div className="h-40 bg-black flex flex-col items-center justify-center gap-6 relative">
+        <div className="flex gap-4">
+          <button onClick={() => setHdrProfile("interior")} 
+                  className={`px-6 py-2 rounded-full text-xs font-bold border transition-all ${hdrProfile === "interior" ? 'bg-white text-black' : 'text-white border-white/20'}`}>
+            INTERIOR
+          </button>
+          <button onClick={() => setHdrProfile("exterior")} 
+                  className={`px-6 py-2 rounded-full text-xs font-bold border transition-all ${hdrProfile === "exterior" ? 'bg-white text-black' : 'text-white border-white/20'}`}>
+            EXTERIOR
+          </button>
+        </div>
+
+        <button onClick={captureSequence} disabled={isProcessing} 
+                className="w-20 h-20 rounded-full border-4 border-white/20 p-1 active:scale-95 transition-all">
+          <div className="w-full h-full rounded-full bg-white" />
+        </button>
+
+        <button onClick={() => navigate(-1)} className="absolute right-8 text-white/60">
+          <X className="w-8 h-8" />
+        </button>
+      </div>
     </div>
   );
 }
