@@ -21,16 +21,17 @@ export const aiService = {
     const prompt = `
       SYSTEM / ENGINE HDR PRO (SNAP IMMOBILE)
       ${contextMap[mode]}
-      OBJETIVO: Gerar uma imagem HDR imobiliária de alta qualidade (estilo Nodalview).
+      OBJETIVO: Gerar uma imagem HDR imobiliária de alta qualidade.
       
       REQUISITOS:
-      1. Manter proporção 4:3 e geometria original.
+      1. Manter proporção 4:3.
       2. Combinar as exposições para dynamic range máximo.
-      3. Recuperar highlights (janelas/céu) e iluminar sombras sem ruído.
-      4. Nitidez profissional e microcontraste em texturas (piso/paredes).
-      5. Cores naturais, sem saturação excessiva.
+      3. Recuperar highlights e iluminar sombras.
       
-      RETORNAR APENAS A IMAGEM PROCESSADA EM BASE64.
+      RETORNO OBRIGATÓRIO:
+      Retorne APENAS a string Base64 da imagem processada. 
+      NÃO inclua blocos de código markdown, NÃO inclua o prefixo "data:image...", NÃO inclua explicações.
+      Apenas a string Base64 pura.
     `;
 
     try {
@@ -43,14 +44,21 @@ export const aiService = {
             { text: prompt },
           ],
         }],
-        generationConfig: { responseMimeType: "image/png" },
+        // Alterado para text/plain pois o modelo não gera arquivos binários diretamente
+        generationConfig: { responseMimeType: "text/plain" },
       });
       
       const response = result.response;
-      const part = response.candidates?.[0]?.content?.parts.find(p => p.inlineData);
-      if (part?.inlineData?.data) {
-        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+      const text = response.text();
+      
+      // Limpa possíveis blocos de código markdown que a IA possa ter adicionado
+      const cleanedBase64 = text.replace(/```[a-z]*\n?|```/g, '').trim();
+      
+      if (cleanedBase64.length > 100) {
+        return `data:image/jpeg;base64,${cleanedBase64}`;
       }
+      
+      console.warn("[Snap AI] Resposta da IA muito curta, retornando original.");
       return base64Image;
     } catch (error) {
       console.error("[Snap AI] Erro no processamento:", error);
@@ -59,5 +67,4 @@ export const aiService = {
   }
 };
 
-// Alias para manter compatibilidade se necessário
 export const enhanceImage = aiService.enhanceImage;
