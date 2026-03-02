@@ -7,6 +7,65 @@ const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_656kn__SFDA4ayT0IPpVFQ_kyjkJ9RN
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+const PROJECT_REF = "coqaiwjpmgfkonlymtbg";
+const AUTH_STORAGE_KEY = `sb-${PROJECT_REF}-auth-token`;
+const AUTH_CODE_VERIFIER_KEY = `sb-${PROJECT_REF}-auth-token-code-verifier`;
+
+const safeStorage: Storage = {
+  get length() {
+    return localStorage.length;
+  },
+  clear() {
+    localStorage.clear();
+  },
+  key(index: number) {
+    return localStorage.key(index);
+  },
+  getItem(key: string) {
+    try {
+      const v = localStorage.getItem(key);
+      if (!v) return v;
+
+      // If a Supabase auth token gets corrupted (partial write / invalid JSON),
+      // supabase-js can break until site data is cleared. We proactively repair it.
+      if (key === AUTH_STORAGE_KEY || key === AUTH_CODE_VERIFIER_KEY) {
+        try {
+          JSON.parse(v);
+        } catch {
+          localStorage.removeItem(key);
+          return null;
+        }
+      }
+
+      return v;
+    } catch {
+      return null;
+    }
+  },
+  setItem(key: string, value: string) {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // ignore
+    }
+  },
+  removeItem(key: string) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
+  },
+};
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    storage: safeStorage,
+    storageKey: AUTH_STORAGE_KEY,
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});
 
 export const hasSupabase = !!SUPABASE_URL && !!SUPABASE_PUBLISHABLE_KEY;

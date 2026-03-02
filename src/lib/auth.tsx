@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
-import type { User, UserRole } from "@/lib/models";
+import type { User } from "@/lib/models";
 import {
   getCurrentUser,
   loginWithEmail,
@@ -28,8 +28,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isReady, setIsReady] = useState(false);
 
   const refresh = useCallback(async () => {
-    const u = await getCurrentUser();
-    setUser(u);
+    try {
+      const u = await getCurrentUser();
+      setUser(u);
+    } catch {
+      // If something unexpected happens (e.g. corrupted persisted session),
+      // don't block the whole app.
+      setUser(null);
+    }
   }, []);
 
   useEffect(() => {
@@ -38,11 +44,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Carregamento inicial rápido
     refresh().finally(() => setIsReady(true));
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event) => {
+      if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") {
         await refresh();
       }
     });
@@ -50,28 +57,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [refresh]);
 
-  const value = useMemo(() => ({
-    user,
-    isReady,
-    refresh,
-    login: async (email: string, pass: string) => {
-      await loginWithEmail(email, pass);
-      await refresh();
-    },
-    loginGoogle: async () => {
-      await loginWithGoogle();
-    },
-    register: async (args: any) => {
-      await registerWithEmail(args);
-    },
-    resetPassword: async (email: string) => {
-      await requestPasswordReset(email);
-    },
-    logout: async () => {
-      await logout();
-      setUser(null);
-    },
-  }), [user, isReady, refresh]);
+  const value = useMemo(
+    () => ({
+      user,
+      isReady,
+      refresh,
+      login: async (email: string, pass: string) => {
+        await loginWithEmail(email, pass);
+        await refresh();
+      },
+      loginGoogle: async () => {
+        await loginWithGoogle();
+      },
+      register: async (args: any) => {
+        await registerWithEmail(args);
+      },
+      resetPassword: async (email: string) => {
+        await requestPasswordReset(email);
+      },
+      logout: async () => {
+        await logout();
+        setUser(null);
+      },
+    }),
+    [user, isReady, refresh],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
