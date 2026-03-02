@@ -18,6 +18,12 @@ function errMsg(err: unknown) {
   }
 }
 
+type BracketPlan =
+  | { kind: "exposureCompensation"; values: number[]; evs: number[]; anchorIndex: number }
+  | { kind: "exposureTime"; values: number[]; evs: number[]; anchorIndex: number }
+  | { kind: "iso"; values: number[]; evs: number[]; anchorIndex: number }
+  | { kind: "none"; values: number[]; evs: number[]; anchorIndex: number };
+
 export default function CameraCapture() {
   const navigate = useNavigate();
   const { id: propertyId } = useParams();
@@ -146,52 +152,98 @@ export default function CameraCapture() {
     const stream = video.srcObject as MediaStream;
     const track = stream.getVideoTracks()[0];
     const caps: any = track.getCapabilities?.() || {};
+    const settings: any = track.getSettings?.() || {};
 
     function quantizeToStep(value: number, step: number) {
       if (!step || step <= 0) return value;
       return Math.round(value / step) * step;
     }
 
-    function buildExposureList(capsAny: any) {
+    function buildExposureCompPlan(capsAny: any): BracketPlan | null {
       const exp = capsAny?.exposureCompensation;
-      if (!exp || typeof exp.min !== "number" || typeof exp.max !== "number") {
-        return { evs: null as number[] | null, anchorIndex: 4 };
-      }
-
+      if (!exp || typeof exp.min !== "number" || typeof exp.max !== "number") return null;
       const min = Number(exp.min);
       const max = Number(exp.max);
       const step = typeof exp.step === "number" ? Number(exp.step) : 0;
 
       const points = 9;
       const anchorIndex = Math.floor(points / 2);
-
       const amp = Math.min(Math.abs(min), Math.abs(max));
-      if (!Number.isFinite(amp) || amp <= 0) {
-        return { evs: null as number[] | null, anchorIndex };
-      }
+      if (!Number.isFinite(amp) || amp <= 0) return null;
 
       const start = -amp;
       const end = amp;
 
-      const evs: number[] = [];
+      const values: number[] = [];
       for (let i = 0; i < points; i++) {
         const t = i / (points - 1);
         const v = start + (end - start) * t;
-        const clamped = Math.max(min, Math.min(max, quantizeToStep(v, step)));
-        evs.push(clamped);
+        values.push(Math.max(min, Math.min(max, quantizeToStep(v, step))));
       }
 
-      return { evs, anchorIndex };
+      return { kind: "exposureCompensation", values, evs: values, anchorIndex };
     }
 
-    const { evs: evList, anchorIndex } = buildExposureList(caps);
+    function buildLogPlan(kind: "exposureTime" | "iso", capsAny: any, settingsAny: any): BracketPlan | null {
+      const cap = capsAny?.[kind];
+      if (!cap || typeof cap.min !== "number" || typeof cap.max !== "number") return null;
+      const min = Number(cap.min);
+      const max = Number(cap.max);
+      const step = typeof cap.step === "number" ? Number(cap.step) : 0;
 
-    if (!evList) {
-      setIsProcessing(false);
-      toast.error("Este dispositivo/browser não suporta bracketing de exposição (HDR via web indisponível).", {
-        duration: 5000,
-      });
-      return;
+      const currentRaw = settingsAny?.[kind];
+      const current = typeof currentRaw === "number" && Number.isFinite(currentRaw) ? currentRaw : null;
+
+      const points = 9;
+      const anchorIndex = Math.floor(points / 2);
+
+      // range seguro em torno do valor atual; evita extremos do sensor
+      const ratio = 4;
+      const start = current ? Math.max(min, Math.min(max, current / ratio)) : min;
+      const end = current ? Math.max(min, Math.min(max, current * ratio)) : max;
+
+      if (!(start > 0 && end > 0) || start === end) return null;
+
+      const values: number[] = [];
+      for (let i = 0; i < points; i++) {
+        const t = i / (points - 1);
+        // log spacing
+        const v = start * Math.pow(end / start, t);
+        values.push(Math.max(min, Math.min(max, quantizeToStep(v, step))));
+      }
+
+      const anchor = values[anchorIndex] || values[Math.floor(values.length / 2)] || 1;
+      const evs = values.map((v) => Math.log2(v / anchor));
+
+      return kind === "exposureTime"
+        ? { kind: "exposureTime", values, evs, anchorIndex }
+        : { kind: "iso", values, evs, anchorIndex };
+    }
+
+    function buildPlan(capsAny: any, settingsAny: any): BracketPlan {
+      const byComp = buildExposureCompPlan(capsAny);
+      if (byComp) return byComp;
+
+      const byTime = buildLogPlan("exposureTime", capsAny, settingsAny);
+      if (byTime) return byTime;
+
+      const byIso = buildLogPlan("iso", capsAny, settingsAny);
+      if (byIso) return byIso;
+
+      const points = 9;
+      const anchorIndex = 4;
+      const values = Array.from({ length: points }, () => 0);
+      const evs = Array.from({ length: points }, () => 0);
+      return { kind: "none", values, evs, anchorIndex };
+    }
+
+    const plan = buildPlan(caps, settings);
+
+    if (plan.kind === "none") {
+      toast.warning(
+        "Seu dispositivo/browser não permite controlar exposição no WebRTC. Vamos capturar em modo único (HDR Lite).",
+        { duration: 5000 },
+      );
     }
 
     // Melhor captura quando disponível
@@ -200,13 +252,39 @@ export default function CameraCapture() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const imageCapture: any = ImageCaptureCtor ? new ImageCaptureCtor(track) : null;
 
-    async function blobToDataUrl(blob: Blob): Promise<string> {
-      return await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () => reject(new Error("Falha ao ler imagem"));
-        reader.readAsDataURL(blob);
-      });
+    // Canvas reutilizável para normalizar takePhoto em 4:3 (evita 16:9 e mantém consistência)
+    const normCanvas = document.createElement("canvas");
+    const normCtx = normCanvas.getContext("2d");
+
+    async function takePhoto43DataUrl(): Promise<string> {
+      if (!imageCapture?.takePhoto || !normCtx) {
+        return drawFrame(ctx, video, canvas, 0.92);
+      }
+
+      const blob: Blob = await imageCapture.takePhoto();
+      const bmp = await createImageBitmap(blob);
+
+      const targetRatio = 4 / 3;
+      const srcRatio = bmp.width / bmp.height;
+
+      let sx = 0,
+        sy = 0,
+        sw = bmp.width,
+        sh = bmp.height;
+
+      if (srcRatio > targetRatio) {
+        sw = Math.round(bmp.height * targetRatio);
+        sx = Math.round((bmp.width - sw) / 2);
+      } else {
+        sh = Math.round(bmp.width / targetRatio);
+        sy = Math.round((bmp.height - sh) / 2);
+      }
+
+      normCanvas.width = sw;
+      normCanvas.height = sh;
+      normCtx.drawImage(bmp, sx, sy, sw, sh, 0, 0, sw, sh);
+
+      return normCanvas.toDataURL("image/jpeg", 0.92);
     }
 
     // Tenta travar AE/WB/foco para não "sabotar" o bracketing
@@ -252,38 +330,41 @@ export default function CameraCapture() {
 
       for (let i = 0; i < 9; i++) {
         try {
-          await track.applyConstraints({ advanced: [{ exposureCompensation: evList[i] }] } as any);
+          if (plan.kind === "exposureCompensation") {
+            await track.applyConstraints({ advanced: [{ exposureCompensation: plan.values[i] }] } as any);
+          } else if (plan.kind === "exposureTime") {
+            await track.applyConstraints({ advanced: [{ exposureTime: plan.values[i] }] } as any);
+          } else if (plan.kind === "iso") {
+            await track.applyConstraints({ advanced: [{ iso: plan.values[i] }] } as any);
+          }
           await new Promise((r) => setTimeout(r, 220));
         } catch (e) {
-          console.warn("[CameraCapture] applyConstraints exposureCompensation falhou:", e, "valor:", evList[i]);
+          console.warn("[CameraCapture] applyConstraints falhou:", e, "kind:", plan.kind, "valor:", plan.values[i]);
         }
 
         shutterRef.current.play().catch(() => {});
         setFlashVisual(true);
         setTimeout(() => setFlashVisual(false), 50);
 
-        let frameDataUrl: string;
-        if (imageCapture?.takePhoto) {
-          const blob = await imageCapture.takePhoto();
-          frameDataUrl = await blobToDataUrl(blob);
-        } else {
-          frameDataUrl = drawFrame(ctx, video, canvas, 0.92);
-        }
-
+        const frameDataUrl = await takePhoto43DataUrl();
         frames.push(frameDataUrl);
+
         setProcessingProgress(10 + i * 5);
         await new Promise((r) => setTimeout(r, 120));
       }
 
+      // reset exposure compensation only (quando existir)
       try {
-        await track.applyConstraints({ advanced: [{ exposureCompensation: 0 }] } as any);
+        if (caps.exposureCompensation) {
+          await track.applyConstraints({ advanced: [{ exposureCompensation: 0 }] } as any);
+        }
       } catch {
         // ignore
       }
 
       setProcessingStep("Fusão HDR (determinístico)...");
       setProcessingProgress(60);
-      const hdr = await fuseHdr9Exposure({ frames, evs: evList, anchorIndex, look });
+      const hdr = await fuseHdr9Exposure({ frames, evs: plan.evs, anchorIndex: plan.anchorIndex, look });
 
       setProcessingStep("Enviando para o Supabase...");
       setProcessingProgress(85);
