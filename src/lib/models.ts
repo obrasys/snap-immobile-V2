@@ -15,11 +15,19 @@ export type User = {
   createdAt: string; // ISO
 };
 
+export type PropertyStatus = "draft" | "active" | "archived";
+
 export type Property = {
   id: string;
   userId: string;
-  name: string;
-  address: string;
+  title: string;
+  addressFull: string;
+  city?: string;
+  district?: string;
+  postalCode?: string;
+  geoLat?: number;
+  geoLng?: number;
+  status: PropertyStatus;
   description?: string;
   createdAt: string; // ISO
 };

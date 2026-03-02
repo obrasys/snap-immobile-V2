@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { CalendarDays, Camera } from "lucide-react";
+import { CalendarDays, Camera, MapPin } from "lucide-react";
 import { TopBar, IconTopButton } from "@/components/app/TopBar";
 import { Card } from "@/components/ui/card";
-import { getProperty } from "@/services/propertyService"; // Updated import
-import { listSessions } from "@/services/hdrService"; // Updated import
+import { getProperty } from "@/services/propertyService";
+import { listSessions } from "@/services/hdrService";
 import { propertyCoverUrl } from "@/lib/images";
 import type { HDRSession, Property } from "@/lib/models";
 import { showError } from "@/utils/toast";
@@ -106,14 +106,28 @@ export default function PropertyDetail() {
       />
 
       <main className="mx-auto w-full max-w-md px-4 pb-10 pt-2 sm:max-w-lg sm:px-6">
-        <div className="text-xs text-muted-foreground">{property.name}</div>
+        <div className="text-xs text-muted-foreground">{property.title}</div>
         <div className="mt-2 overflow-hidden rounded-3xl bg-muted shadow-sm">
           <img
-            alt={property.name}
+            alt={property.title}
             src={propertyCoverUrl(property.id)}
             className="h-44 w-full object-cover min-[420px]:h-48"
             loading="lazy"
           />
+        </div>
+
+        <div className="mt-3 rounded-3xl border border-primary/10 bg-secondary/40 p-4">
+          <div className="flex items-start gap-2">
+            <MapPin className="mt-0.5 h-4 w-4 text-primary" />
+            <div>
+              <div className="text-sm font-semibold tracking-tight text-foreground">
+                {property.addressFull}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Status: <span className="font-semibold">{property.status}</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="mt-6 text-sm font-extrabold tracking-tight">Galeria HDR</div>
@@ -141,7 +155,11 @@ export default function PropertyDetail() {
                     </div>
                   </div>
                   {s.hdrImageUrl ? (
-                    <img src={s.hdrImageUrl} alt="HDR Session" className="w-20 h-16 object-cover rounded-lg" />
+                    <img
+                      src={s.hdrImageUrl}
+                      alt="HDR Session"
+                      className="h-16 w-20 rounded-lg object-cover"
+                    />
                   ) : (
                     <div className="text-xs font-semibold text-muted-foreground">
                       {s.status}

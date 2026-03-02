@@ -6,7 +6,7 @@ import { Camera, Plus, Search, UserRoundCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
-import { listProperties } from "@/services/propertyService"; // Updated import
+import { listProperties } from "@/services/propertyService";
 import { propertyCoverUrl } from "@/lib/images";
 import { TopBar, IconTopButton } from "@/components/app/TopBar";
 import { showError, showSuccess } from "@/utils/toast";
@@ -103,11 +103,11 @@ export default function Properties({
           <div className="mt-5 grid gap-5">
             {properties.map((p) => (
               <div key={p.id} className="space-y-2">
-                <div className="text-xs text-muted-foreground">{p.name}</div>
+                <div className="text-xs text-muted-foreground">{p.title}</div>
                 <Link to={`/app/properties/${p.id}`} className="block">
                   <Card className="overflow-hidden rounded-3xl border-0 bg-muted shadow-sm">
                     <img
-                      alt={p.name}
+                      alt={p.title}
                       src={propertyCoverUrl(p.id)}
                       className="h-44 w-full object-cover min-[420px]:h-48"
                       loading="lazy"

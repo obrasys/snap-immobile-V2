@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { MapPin, RotateCw, X } from "lucide-react";
 import {
   Drawer,
   DrawerClose,
@@ -9,19 +10,9 @@ import {
 } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { createProperty } from "@/services/propertyService";
+import { createPropertyDraft } from "@/services/propertyService";
 import { showError, showSuccess } from "@/utils/toast";
-
-const STATES = [
-  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
-];
+import { usePinLocation } from "@/hooks/usePinLocation";
 
 export function CreatePropertyDrawer({
   open,
@@ -34,13 +25,25 @@ export function CreatePropertyDrawer({
   userId: string;
   onCreated: () => void;
 }) {
-  const [name, setName] = useState("");
-  const [street, setStreet] = useState("");
-  const [number, setNumber] = useState("");
-  const [neighborhood, setNeighborhood] = useState("");
-  const [state, setState] = useState("SP");
-  const [cep, setCep] = useState("");
+  const nav = useNavigate();
+
+  const [title, setTitle] = useState("");
+  const [addressFull, setAddressFull] = useState("");
+  const [city, setCity] = useState("");
+  const [district, setDistrict] = useState("");
+  const [postalCode, setPostalCode] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const { pinState, pin, retry, goIdle, coords, isLoading: pinLoading } = usePinLocation();
+
+  useEffect(() => {
+    if (pinState.status === "pin_success") {
+      setAddressFull(pinState.result.addressFull);
+      setCity(pinState.result.city ?? "");
+      setDistrict(pinState.result.district ?? "");
+      setPostalCode(pinState.result.postalCode ?? "");
+    }
+  }, [pinState]);
 
   const inputClass = useMemo(
     () =>
@@ -49,37 +52,64 @@ export function CreatePropertyDrawer({
   );
 
   function resetForm() {
-    setName("");
-    setStreet("");
-    setNumber("");
-    setNeighborhood("");
-    setState("SP");
-    setCep("");
+    setTitle("");
+    setAddressFull("");
+    setCity("");
+    setDistrict("");
+    setPostalCode("");
+    goIdle();
   }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
 
+    if (!title.trim()) {
+      showError("Informe o título do imóvel");
+      return;
+    }
+
+    if (!addressFull.trim()) {
+      showError("Informe o endereço (PIN ou manual)");
+      return;
+    }
+
     try {
       setLoading(true);
-      const address = `${street}, ${number} - ${neighborhood} - ${state} • CEP ${cep}`
-        .replace(/\s+/g, " ")
-        .trim();
 
-      // Adicionado await para garantir a criação antes de prosseguir
-      await createProperty({ userId, name, address });
-      
-      showSuccess("Imóvel criado com sucesso");
+      const created = await createPropertyDraft({
+        userId,
+        title: title.trim(),
+        addressFull: addressFull.trim(),
+        city: city.trim() || undefined,
+        district: district.trim() || undefined,
+        postalCode: postalCode.trim() || undefined,
+        geoLat: coords?.lat,
+        geoLng: coords?.lng,
+      });
+
+      showSuccess("Imóvel criado (rascunho)");
       resetForm();
       onCreated();
       onOpenChange(false);
+      nav(`/app/properties/${created.id}`);
     } catch (err) {
-      console.error("Erro ao criar imóvel:", err);
-      showError("Erro ao criar imóvel");
+      console.error("[CreatePropertyDrawer] Erro ao criar imóvel:", err);
+      showError(err instanceof Error ? err.message : "Erro ao criar imóvel");
     } finally {
       setLoading(false);
     }
   }
+
+  const pinHint =
+    pinState.status === "pin_loading"
+      ? "Localizando…"
+      : pinState.status === "pin_success" && pinState.result.isApproximate
+        ? "Endereço aproximado"
+        : pinState.status === "pin_success"
+          ? "Endereço confirmado"
+          : pinState.status === "pin_error"
+            ? pinState.message
+            : "Use o PIN para preencher automaticamente";
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange} shouldScaleBackground>
@@ -104,73 +134,93 @@ export function CreatePropertyDrawer({
                   Criar um novo imóvel
                 </div>
                 <div className="mt-1 text-sm text-white/85">
-                  Crie um novo imóvel cada vez que começar a capturar um novo
-                  imóvel.
+                  Título + endereço (via PIN ou manual). Sem mapa.
                 </div>
 
                 <form onSubmit={onSubmit} className="mt-5 space-y-4">
                   <div>
-                    <div className="text-xs font-semibold text-white/80">
-                      Detalhes do imóvel
-                    </div>
+                    <div className="text-xs font-semibold text-white/80">Título</div>
                     <Input
                       className={`${inputClass} mt-2`}
-                      placeholder="Nome"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Ex: Apt 3/4 em Boa Viagem"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
                       required
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <div className="text-xs font-semibold text-white/80">
-                      Localização do imóvel
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-semibold text-white/80">Endereço</div>
+                      <div className="text-[11px] text-white/70">{pinHint}</div>
                     </div>
+
+                    <div className="relative">
+                      <Input
+                        className={`${inputClass} pr-12`}
+                        placeholder="Digite ou use o PIN"
+                        value={addressFull}
+                        onChange={(e) => {
+                          setAddressFull(e.target.value);
+                          if (pinState.status !== "pin_idle") goIdle();
+                        }}
+                        required
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (pinState.status === "pin_error") retry();
+                          else pin();
+                        }}
+                        disabled={pinLoading}
+                        className={`absolute right-2 top-1/2 -translate-y-1/2 grid h-9 w-9 place-items-center rounded-xl border border-white/20 bg-white/10 text-white transition-colors hover:bg-white/15 disabled:opacity-50`}
+                        aria-label="Usar minha localização"
+                      >
+                        {pinLoading ? (
+                          <RotateCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <MapPin className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+
+                    {pinState.status === "pin_error" ? (
+                      <div className="flex items-center justify-between rounded-2xl border border-white/15 bg-white/10 px-3 py-2">
+                        <div className="text-xs text-white/85">{pinState.message}</div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => retry()}
+                          className="h-8 rounded-xl bg-white/10 px-3 text-xs font-semibold text-white hover:bg-white/15"
+                        >
+                          Tentar novamente
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {/* Campos opcionais (mantendo no fluxo, mas sem priorizar layout agora) */}
+                  <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
                     <Input
                       className={inputClass}
-                      placeholder="Nome da Rua"
-                      value={street}
-                      onChange={(e) => setStreet(e.target.value)}
-                      required
+                      placeholder="Cidade (opcional)"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
                     />
-                    <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
-                      <Input
-                        className={inputClass}
-                        placeholder="Número"
-                        value={number}
-                        onChange={(e) => setNumber(e.target.value)}
-                        required
-                      />
-                      <Input
-                        className={inputClass}
-                        placeholder="Bairro"
-                        value={neighborhood}
-                        onChange={(e) => setNeighborhood(e.target.value)}
-                        required
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
-                      <Select value={state} onValueChange={setState}>
-                        <SelectTrigger className="h-11 rounded-2xl border-white/60 bg-transparent text-white focus:ring-white/25">
-                          <SelectValue placeholder="Estado" />
-                        </SelectTrigger>
-                        <SelectContent className="rounded-2xl">
-                          {STATES.map((uf) => (
-                            <SelectItem key={uf} value={uf}>
-                              {uf}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        className={inputClass}
-                        placeholder="CEP"
-                        value={cep}
-                        onChange={(e) => setCep(e.target.value)}
-                        required
-                      />
-                    </div>
+                    <Input
+                      className={inputClass}
+                      placeholder="Bairro (opcional)"
+                      value={district}
+                      onChange={(e) => setDistrict(e.target.value)}
+                    />
                   </div>
+                  <Input
+                    className={inputClass}
+                    placeholder="CEP (opcional)"
+                    value={postalCode}
+                    onChange={(e) => setPostalCode(e.target.value)}
+                  />
 
                   <div className="pt-1">
                     <Button
@@ -178,7 +228,7 @@ export function CreatePropertyDrawer({
                       type="submit"
                       className="h-11 w-full rounded-2xl bg-[hsl(var(--cta))] text-white hover:bg-[hsl(var(--cta))]/90"
                     >
-                      {loading ? "A guardar..." : "Guardar"}
+                      {loading ? "Salvando..." : "Salvar e continuar"}
                     </Button>
                   </div>
                 </form>
