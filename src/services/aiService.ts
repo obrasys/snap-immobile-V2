@@ -6,11 +6,76 @@ const getApiKey = () => {
 
 const API_BASE = "https://generativelanguage.googleapis.com/v1";
 
+function normalizeModelName(name: string) {
+  return name.startsWith("models/") ? name.slice("models/".length) : name;
+}
+
+async function listModelsV1(apiKey: string): Promise<string[]> {
+  const url = `${API_BASE}/models?key=${encodeURIComponent(apiKey)}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Gemini ListModels (${res.status}) ${res.statusText}: ${txt.slice(0, 500)}`);
+  }
+  const json = await res.json();
+  const models: any[] = Array.isArray(json?.models) ? json.models : [];
+
+  // Preferimos apenas modelos que suportam generateContent.
+  const supported = models
+    .filter((m) => Array.isArray(m?.supportedGenerationMethods) && m.supportedGenerationMethods.includes("generateContent"))
+    .map((m) => String(m?.name || ""))
+    .filter(Boolean)
+    .map(normalizeModelName);
+
+  return supported;
+}
+
+let cachedImageModel: string | null = null;
+let cachedImageModelChecked = false;
+
+async function pickImageModelV1(apiKey: string): Promise<string> {
+  // Ordem de tentativas (modelos estáveis mais comuns primeiro)
+  const preferred = [
+    "gemini-2.5-flash-image",
+    "gemini-2.0-flash-image",
+    "gemini-2.5-flash-image-preview",
+  ];
+
+  // Tenta usar cache
+  if (cachedImageModel) return cachedImageModel;
+  if (cachedImageModelChecked) {
+    throw new Error(
+      "Nenhum modelo de IMAGEM disponível para esta chave. Habilite um modelo de imagem (Flash Image) na sua conta Google AI.",
+    );
+  }
+
+  cachedImageModelChecked = true;
+
+  // Primeiro: tenta a lista preferida, mas só valida de verdade via listModels
+  const available = await listModelsV1(apiKey);
+
+  const preferredAvailable = preferred.find((m) => available.includes(m));
+  if (preferredAvailable) {
+    cachedImageModel = preferredAvailable;
+    return preferredAvailable;
+  }
+
+  // Fallback: procura qualquer modelo que pareça de imagem.
+  const firstImageModel = available.find((m) => m.includes("image"));
+  if (firstImageModel) {
+    cachedImageModel = firstImageModel;
+    return firstImageModel;
+  }
+
+  throw new Error(
+    `Nenhum modelo de IMAGEM disponível. Modelos disponíveis (amostra): ${available.slice(0, 8).join(", ")}`,
+  );
+}
+
 async function generateContentV1(args: { apiKey: string; model: string; parts: Array<Record<string, unknown>> }) {
   const url = `${API_BASE}/models/${args.model}:generateContent?key=${encodeURIComponent(args.apiKey)}`;
 
-  // NOTE: Algumas contas/rotas do Gemini API (v1) rejeitam fields novos como responseModalities.
-  // Para maximizar compatibilidade, enviamos um payload mínimo (contents only).
+  // Payload mínimo (máxima compatibilidade)
   const body = {
     contents: [{ parts: args.parts }],
   };
@@ -40,7 +105,7 @@ function extractFirstInlineImageBase64(response: any): string {
     throw new Error(`Gemini retornou TEXTO (sem imagem): ${String(textPart.text).slice(0, 220)}`);
   }
 
-  throw new Error("Gemini não retornou imagem (inlineData). Modelo pode não estar habilitado nesta chave.");
+  throw new Error("Gemini não retornou imagem (inlineData). Modelo/conta pode não suportar saída de imagem.");
 }
 
 export const enhanceImage = async (
@@ -49,6 +114,8 @@ export const enhanceImage = async (
 ): Promise<string> => {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("Chave Gemini não configurada (VITE_GEMINI_API_KEY / VITE_API_KEY).");
+
+  const model = await pickImageModelV1(apiKey);
 
   const contextMap = {
     hp_hdr_interior: "CONTEXTO: Interior de Imóvel. Prioridade: Profundidade e Iluminação Natural.",
@@ -76,7 +143,7 @@ OBRIGATÓRIO: Retornar APENAS a imagem processada.
   try {
     const response = await generateContentV1({
       apiKey,
-      model: "gemini-2.5-flash-image-preview",
+      model,
       parts: [
         { text: prompt },
         { inlineData: { data: cleanBase64(base64Image), mimeType: getMimeType(base64Image) } },
@@ -99,6 +166,8 @@ export const editImageWithPrompt = async (
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("Chave Gemini não configurada (VITE_GEMINI_API_KEY / VITE_API_KEY).");
 
+  const model = await pickImageModelV1(apiKey);
+
   const sys =
     mode === "ERASE"
       ? `TASK: MAGIC ERASER / INPAINTING.
@@ -113,7 +182,7 @@ ACTION:
   try {
     const response = await generateContentV1({
       apiKey,
-      model: "gemini-2.5-flash-image-preview",
+      model,
       parts: [
         { text: sys + "\n\nUser Instruction: " + prompt },
         { inlineData: { data: cleanBase64(base64Image), mimeType: getMimeType(base64Image) } },
