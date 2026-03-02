@@ -10,7 +10,7 @@ export async function listSessions(propertyId: string): Promise<HDRSession[]> {
   console.log("[hdrService] Listing sessions for property:", propertyId);
   const { data, error } = await supabase
     .from("hdr_sessions")
-    .select("id, property_id, images_count, hdr_image_url, status, error_message, created_at, mode")
+    .select("id, property_id, images_count, hdr_image_data_url, status, error_message, created_at, mode")
     .eq("property_id", propertyId)
     .order("created_at", { ascending: false });
 
@@ -24,11 +24,11 @@ export async function listSessions(propertyId: string): Promise<HDRSession[]> {
       id: s.id,
       propertyId: s.property_id,
       imagesCount: s.images_count,
-      hdrImageUrl: s.hdr_image_url ?? undefined,
+      hdrImageUrl: s.hdr_image_data_url ?? undefined,
       status: s.status,
       errorMessage: s.error_message ?? undefined,
       createdAt: s.created_at,
-      mode: s.mode as PhotoMode ?? undefined,
+      mode: (s.mode as PhotoMode) ?? undefined,
     })) ?? []
   );
 }
@@ -78,7 +78,7 @@ export async function createHdrSession(args: {
       status: "processing",
       mode: args.mode,
     })
-    .select("id, property_id, images_count, hdr_image_url, status, error_message, created_at, mode")
+    .select("id, property_id, images_count, hdr_image_data_url, status, error_message, created_at, mode")
     .single();
 
   if (error) {
@@ -90,11 +90,11 @@ export async function createHdrSession(args: {
     id: data.id,
     propertyId: data.property_id,
     imagesCount: data.images_count,
-    hdrImageUrl: data.hdr_image_url ?? undefined,
+    hdrImageUrl: data.hdr_image_data_url ?? undefined,
     status: data.status,
     errorMessage: data.error_message ?? undefined,
     createdAt: data.created_at,
-    mode: data.mode as PhotoMode ?? undefined,
+    mode: (data.mode as PhotoMode) ?? undefined,
   };
 }
 
@@ -102,7 +102,7 @@ export async function updateHdrSession(sessionId: string, patch: Partial<HDRSess
   console.log("[hdrService] Updating HDR session:", sessionId, patch);
   const mapped: Record<string, unknown> = {};
   if (typeof patch.status !== "undefined") mapped.status = patch.status;
-  if (typeof patch.hdrImageUrl !== "undefined") mapped.hdr_image_url = patch.hdrImageUrl;
+  if (typeof patch.hdrImageUrl !== "undefined") mapped.hdr_image_data_url = patch.hdrImageUrl;
   if (typeof patch.errorMessage !== "undefined") mapped.error_message = patch.errorMessage;
   if (typeof patch.mode !== "undefined") mapped.mode = patch.mode;
 
@@ -118,23 +118,19 @@ export async function uploadHdrImage(userId: string, sessionId: string, base64Im
   console.log("[hdrService] Uploading HDR image for session:", sessionId);
   const blob = dataUrlToBlob(base64Image);
   const mimeType = getMimeType(base64Image);
-  const filePath = `${userId}/${sessionId}.${mimeType.split('/')[1] || 'jpeg'}`;
+  const filePath = `${userId}/${sessionId}.${mimeType.split("/")[1] || "jpeg"}`;
 
-  const { data, error } = await supabase.storage
-    .from('snap-immobile-photos')
-    .upload(filePath, blob, {
-      contentType: mimeType,
-      upsert: true,
-    });
+  const { error } = await supabase.storage.from("snap-immobile-photos").upload(filePath, blob, {
+    contentType: mimeType,
+    upsert: true,
+  });
 
   if (error) {
     console.error("[hdrService] Error uploading image:", error);
     throw new Error(`Falha ao fazer upload da imagem: ${error.message}`);
   }
 
-  const { data: publicUrlData } = supabase.storage
-    .from('snap-immobile-photos')
-    .getPublicUrl(filePath);
+  const { data: publicUrlData } = supabase.storage.from("snap-immobile-photos").getPublicUrl(filePath);
 
   if (!publicUrlData?.publicUrl) {
     console.error("[hdrService] Failed to get public URL for image:", filePath);
