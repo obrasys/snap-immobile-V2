@@ -9,6 +9,17 @@ import { Label } from "@/components/ui/label";
 import { showError, showSuccess } from "@/utils/toast";
 import { useAuth } from "@/lib/auth";
 
+function sanitizePostLoginPath(path: unknown) {
+  if (typeof path !== "string") return "/app/properties";
+  if (!path.startsWith("/")) return "/app/properties";
+
+  // Evita cair direto na câmera depois do login.
+  // (Ex.: usuário tentou abrir /camera sem estar autenticado.)
+  if (path.includes("/camera")) return "/app/properties";
+
+  return path;
+}
+
 export default function Login() {
   const nav = useNavigate();
   const loc = useLocation();
@@ -16,7 +27,7 @@ export default function Login() {
 
   const from = useMemo(() => {
     const s = (loc.state as { from?: string } | null)?.from;
-    return s && typeof s === "string" ? s : "/app/properties";
+    return sanitizePostLoginPath(s);
   }, [loc.state]);
 
   const [email, setEmail] = useState("");
