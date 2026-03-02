@@ -6,7 +6,7 @@ export async function listProperties(userId: string): Promise<Property[]> {
   const { data, error } = await supabase
     .from("properties")
     .select(
-      "id, user_id, title, address_full, city, district, postal_code, geo_lat, geo_lng, status, description, created_at",
+      "id, user_id, title, address_full, city, district, postal_code, geo_lat, geo_lng, status, description, created_at, name, address",
     )
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
@@ -21,8 +21,8 @@ export async function listProperties(userId: string): Promise<Property[]> {
     data?.map((p) => ({
       id: p.id,
       userId: p.user_id,
-      title: p.title ?? "",
-      addressFull: p.address_full ?? "",
+      title: p.title ?? p.name ?? "",
+      addressFull: p.address_full ?? p.address ?? "",
       city: p.city ?? undefined,
       district: p.district ?? undefined,
       postalCode: p.postal_code ?? undefined,
@@ -40,7 +40,7 @@ export async function getProperty(propertyId: string): Promise<Property | null> 
   const { data, error } = await supabase
     .from("properties")
     .select(
-      "id, user_id, title, address_full, city, district, postal_code, geo_lat, geo_lng, status, description, created_at",
+      "id, user_id, title, address_full, city, district, postal_code, geo_lat, geo_lng, status, description, created_at, name, address",
     )
     .eq("id", propertyId)
     .maybeSingle();
@@ -54,8 +54,8 @@ export async function getProperty(propertyId: string): Promise<Property | null> 
   return {
     id: data.id,
     userId: data.user_id,
-    title: data.title ?? "",
-    addressFull: data.address_full ?? "",
+    title: data.title ?? data.name ?? "",
+    addressFull: data.address_full ?? data.address ?? "",
     city: data.city ?? undefined,
     district: data.district ?? undefined,
     postalCode: data.postal_code ?? undefined,
@@ -79,10 +79,16 @@ export async function createPropertyDraft(args: {
 }): Promise<Property> {
   console.log("[propertyService] Creating property draft:", args.title);
 
+  // Importante: a tabela antiga ainda tem NOT NULL em name/address.
+  // Mantemos compatibilidade preenchendo name/address com title/address_full.
   const { data, error } = await supabase
     .from("properties")
     .insert({
       user_id: args.userId,
+      // colunas antigas
+      name: args.title,
+      address: args.addressFull,
+      // colunas novas
       title: args.title,
       address_full: args.addressFull,
       city: args.city ?? null,
@@ -93,7 +99,7 @@ export async function createPropertyDraft(args: {
       status: "draft",
     })
     .select(
-      "id, user_id, title, address_full, city, district, postal_code, geo_lat, geo_lng, status, description, created_at",
+      "id, user_id, title, address_full, city, district, postal_code, geo_lat, geo_lng, status, description, created_at, name, address",
     )
     .single();
 
@@ -105,8 +111,8 @@ export async function createPropertyDraft(args: {
   return {
     id: data.id,
     userId: data.user_id,
-    title: data.title ?? "",
-    addressFull: data.address_full ?? "",
+    title: data.title ?? data.name ?? "",
+    addressFull: data.address_full ?? data.address ?? "",
     city: data.city ?? undefined,
     district: data.district ?? undefined,
     postalCode: data.postal_code ?? undefined,
