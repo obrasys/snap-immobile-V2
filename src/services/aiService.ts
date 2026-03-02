@@ -6,19 +6,13 @@ const getApiKey = () => {
 
 const API_BASE = "https://generativelanguage.googleapis.com/v1";
 
-async function generateContentV1(args: {
-  apiKey: string;
-  model: string;
-  parts: Array<Record<string, unknown>>;
-  responseModalities?: Array<"TEXT" | "IMAGE">;
-}) {
+async function generateContentV1(args: { apiKey: string; model: string; parts: Array<Record<string, unknown>> }) {
   const url = `${API_BASE}/models/${args.model}:generateContent?key=${encodeURIComponent(args.apiKey)}`;
 
+  // NOTE: Algumas contas/rotas do Gemini API (v1) rejeitam fields novos como responseModalities.
+  // Para maximizar compatibilidade, enviamos um payload mínimo (contents only).
   const body = {
     contents: [{ parts: args.parts }],
-    generationConfig: {
-      responseModalities: args.responseModalities ?? ["TEXT", "IMAGE"],
-    },
   };
 
   const res = await fetch(url, {
@@ -29,7 +23,7 @@ async function generateContentV1(args: {
 
   if (!res.ok) {
     const txt = await res.text();
-    throw new Error(`Gemini API (${res.status}) ${res.statusText}: ${txt.slice(0, 500)}`);
+    throw new Error(`Gemini API (${res.status}) ${res.statusText}: ${txt.slice(0, 900)}`);
   }
 
   return res.json();
@@ -80,16 +74,13 @@ OBRIGATÓRIO: Retornar APENAS a imagem processada.
 `;
 
   try {
-    // O SDK @google/genai está batendo em v1beta no browser em alguns casos.
-    // Aqui forçamos o endpoint v1, que é o que tem suportado os modelos de imagem mais recentes.
     const response = await generateContentV1({
       apiKey,
       model: "gemini-2.5-flash-image-preview",
       parts: [
-        { inlineData: { data: cleanBase64(base64Image), mimeType: getMimeType(base64Image) } },
         { text: prompt },
+        { inlineData: { data: cleanBase64(base64Image), mimeType: getMimeType(base64Image) } },
       ],
-      responseModalities: ["TEXT", "IMAGE"],
     });
 
     const imgBase64 = extractFirstInlineImageBase64(response);
@@ -124,10 +115,9 @@ ACTION:
       apiKey,
       model: "gemini-2.5-flash-image-preview",
       parts: [
-        { inlineData: { data: cleanBase64(base64Image), mimeType: getMimeType(base64Image) } },
         { text: sys + "\n\nUser Instruction: " + prompt },
+        { inlineData: { data: cleanBase64(base64Image), mimeType: getMimeType(base64Image) } },
       ],
-      responseModalities: ["TEXT", "IMAGE"],
     });
 
     const imgBase64 = extractFirstInlineImageBase64(response);
@@ -150,10 +140,9 @@ export const generateDescription = async (base64Image: string): Promise<string> 
       apiKey,
       model: "gemini-2.5-flash",
       parts: [
-        { inlineData: { data: cleanBase64(base64Image), mimeType: getMimeType(base64Image) } },
         { text: "Descreva esta divisão imobiliária numa frase curta e profissional em PT-PT." },
+        { inlineData: { data: cleanBase64(base64Image), mimeType: getMimeType(base64Image) } },
       ],
-      responseModalities: ["TEXT"],
     });
 
     const text = response?.candidates?.[0]?.content?.parts?.find((p: any) => typeof p?.text === "string")?.text;
