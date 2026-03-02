@@ -258,7 +258,7 @@ export default function CameraCapture() {
         </div>
 
         <div className="absolute bottom-32 left-1/2 -translate-x-1/2 flex gap-3 bg-black/40 p-2 rounded-full backdrop-blur-md border border-white/10">
-          {[0.5, 1, 2].map((z) => (
+          {[0.5, 1].map((z) => (
             <button
               key={z}
               onClick={() => handleZoom(z)}
