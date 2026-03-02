@@ -3,8 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
-import { aiService } from "@/services/aiService";
 import { createHdrSession, updateHdrSession, uploadHdrImage } from "@/services/hdrService";
+import { fuseHdr9Exposure } from "@/services/hdrPipeline";
 
 const SHUTTER_SOUND = "https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3";
 
@@ -89,7 +89,12 @@ export default function CameraCapture() {
     }
   };
 
-  const drawFrame = (ctx: CanvasRenderingContext2D, video: HTMLVideoElement, canvas: HTMLCanvasElement) => {
+  const drawFrame = (
+    ctx: CanvasRenderingContext2D,
+    video: HTMLVideoElement,
+    canvas: HTMLCanvasElement,
+    quality: number,
+  ) => {
     const targetRatio = 4 / 3;
     const videoRatio = video.videoWidth / video.videoHeight;
     let sw = video.videoWidth,
@@ -108,6 +113,7 @@ export default function CameraCapture() {
     canvas.width = sw;
     canvas.height = sh;
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+    return canvas.toDataURL("image/jpeg", quality);
   };
 
   const captureSequence = async () => {
@@ -131,43 +137,42 @@ export default function CameraCapture() {
     const track = stream.getVideoTracks()[0];
     const caps: any = track.getCapabilities?.() || {};
 
-    const interiorEV = [1, 0.5, 0, -0.7, -1.3, -2, -2.7, -3.3, -4];
-    const exteriorEV = [2, 1.3, 0.7, 0, -0.3, -1, -1.7, -2.3, -3];
+    // Pipeline HDR 9 exposures (fixo)
+    const evList = [-4, -3, -2, -1, 0, 1, 2, 3, 4];
+    const anchorIndex = 4;
 
-    let effectiveProfile: "hp_hdr_interior" | "hp_hdr_exterior" | "hp_hdr_window" =
-      hdrProfile === "interior" ? "hp_hdr_interior" : "hp_hdr_exterior";
-
+    // Detecta "window" de forma simples (mesma heurística anterior), mas mantemos pipeline determinístico
+    let look: "interior" | "exterior" | "window" = hdrProfile === "exterior" ? "exterior" : "interior";
     if (hdrProfile === "interior") {
-      drawFrame(ctx, video, canvas);
+      const probe = drawFrame(ctx, video, canvas, 0.6);
+      const probeImg = await (await fetch(probe)).blob();
+      const bmp = await createImageBitmap(probeImg);
+      ctx.drawImage(bmp, 0, 0);
       const topData = ctx.getImageData(0, 0, canvas.width, canvas.height * 0.3).data;
       let brightPixels = 0;
       for (let i = 0; i < topData.length; i += 16) {
         if (topData[i] > 230 && topData[i + 1] > 230 && topData[i + 2] > 230) brightPixels++;
       }
-      if (brightPixels / (topData.length / 16) > 0.15) effectiveProfile = "hp_hdr_window";
+      if (brightPixels / (topData.length / 16) > 0.15) look = "window";
     }
-
-    const evList =
-      effectiveProfile === "hp_hdr_window"
-        ? [-1, -2, -3, -4, -5, -6, -7, -8, -9]
-        : hdrProfile === "interior"
-          ? interiorEV
-          : exteriorEV;
-
-    let bestBase64 = "";
 
     let sessionId: string | null = null;
     try {
       setProcessingStep("Criando sessão...");
       setProcessingProgress(8);
-      const session = await createHdrSession({ userId: user.id, propertyId, imagesCount: 9, mode: effectiveProfile });
+
+      const mode = look === "interior" ? "hp_hdr_interior" : look === "window" ? "hp_hdr_window" : "hp_hdr_exterior";
+
+      const session = await createHdrSession({ userId: user.id, propertyId, imagesCount: 9, mode });
       sessionId = session.id;
+
+      const frames: string[] = [];
 
       for (let i = 0; i < 9; i++) {
         if (caps.exposureCompensation) {
           try {
             await track.applyConstraints({ advanced: [{ exposureCompensation: evList[i] }] } as any);
-            await new Promise((r) => setTimeout(r, 150));
+            await new Promise((r) => setTimeout(r, 160));
           } catch {
             // ignore
           }
@@ -177,15 +182,13 @@ export default function CameraCapture() {
         setFlashVisual(true);
         setTimeout(() => setFlashVisual(false), 50);
 
-        drawFrame(ctx, video, canvas);
-        const frameBase64 = canvas.toDataURL("image/jpeg", 0.7);
-        setCapturedPreviews((prev) => [...prev, { url: frameBase64, ev: `${evList[i]}EV` }]);
+        const frame = drawFrame(ctx, video, canvas, i === anchorIndex ? 0.95 : 0.6);
+        frames.push(frame);
+        setCapturedPreviews((prev) => [...prev, { url: frame, ev: `${evList[i]}EV` }]);
 
-        if (i === 4) bestBase64 = canvas.toDataURL("image/jpeg", 0.95);
         setProcessingProgress(10 + i * 5);
+        await new Promise((r) => setTimeout(r, 120));
       }
-
-      if (!bestBase64) bestBase64 = canvas.toDataURL("image/jpeg", 0.95);
 
       if (caps.exposureCompensation) {
         try {
@@ -195,19 +198,19 @@ export default function CameraCapture() {
         }
       }
 
-      setProcessingStep("Processando no Gemini...");
+      setProcessingStep("Fusão HDR (determinístico)...");
       setProcessingProgress(60);
-      const enhanced = await aiService.enhanceImage(bestBase64, effectiveProfile);
+      const hdr = await fuseHdr9Exposure({ frames, evs: evList, anchorIndex, look });
 
       setProcessingStep("Enviando para o Supabase...");
       setProcessingProgress(85);
-      const publicUrl = await uploadHdrImage(user.id, sessionId, enhanced);
+      const publicUrl = await uploadHdrImage(user.id, sessionId, hdr);
 
       setProcessingStep("Finalizando...");
       setProcessingProgress(95);
-      await updateHdrSession(sessionId, { hdrImageUrl: publicUrl, status: "done" });
+      await updateHdrSession(sessionId, { hdrImageUrl: publicUrl, status: "done", mode });
 
-      toast.success("Foto capturada com sucesso!");
+      toast.success("HDR criado com sucesso!");
       navigate(-1);
     } catch (err) {
       console.error("[CameraCapture] Processing error:", err);
