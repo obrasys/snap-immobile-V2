@@ -46,12 +46,40 @@ export async function upsertProfile(input: {
     role: input.role,
     plan: input.plan,
     avatar_url: input.avatarUrl ?? "",
-    // Deixamos o banco de dados gerenciar as datas automaticamente
+    updated_at: new Date().toISOString(),
   });
   if (error) {
     console.error("[profileService] Error during profile upsert:", error);
     throw error;
   }
+}
+
+export async function uploadProfilePhoto(userId: string, file: File): Promise<string> {
+  console.log("[profileService] Uploading profile photo for user:", userId);
+
+  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  const safeExt = ext.match(/^[a-z0-9]+$/) ? ext : "jpg";
+  const filePath = `avatars/${userId}/${Date.now()}.${safeExt}`;
+
+  const { error } = await supabase.storage.from("snap-immobile-photos").upload(filePath, file, {
+    contentType: file.type || "image/jpeg",
+    upsert: true,
+  });
+
+  if (error) {
+    console.error("[profileService] Error uploading profile photo:", error);
+    throw new Error(`Falha ao fazer upload da foto: ${error.message}`);
+  }
+
+  const { data: publicUrlData } = supabase.storage.from("snap-immobile-photos").getPublicUrl(filePath);
+
+  if (!publicUrlData?.publicUrl) {
+    console.error("[profileService] Failed to get public URL for profile photo:", filePath);
+    throw new Error("Falha ao obter URL pública da foto.");
+  }
+
+  console.log("[profileService] Profile photo uploaded:", publicUrlData.publicUrl);
+  return publicUrlData.publicUrl;
 }
 
 export async function upgradePlan(userId: string, plan: UserPlan) {
