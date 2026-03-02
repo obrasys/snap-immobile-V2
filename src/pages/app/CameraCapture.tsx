@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { X } from "lucide-react";
+import { Grid3X3, Home, Image as ImageIcon, Timer, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { createHdrSession, updateHdrSession, uploadHdrImage } from "@/services/hdrService";
 import { fuseHdr9Exposure } from "@/services/hdrPipeline";
+import { useOrientationAngle } from "@/hooks/use-orientation-angle";
 
 const SHUTTER_SOUND = "https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3";
 
@@ -21,6 +22,7 @@ export default function CameraCapture() {
   const navigate = useNavigate();
   const { id: propertyId } = useParams();
   const { user } = useAuth();
+  const { angle } = useOrientationAngle();
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -30,25 +32,26 @@ export default function CameraCapture() {
   const [processingStep, setProcessingStep] = useState("");
   const [processingProgress, setProcessingProgress] = useState(0);
   const [hdrProfile, setHdrProfile] = useState<"interior" | "exterior">("interior");
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState<0.5 | 1>(1);
   const [tilt, setTilt] = useState({ beta: 0, gamma: 0 });
-  const [capturedPreviews, setCapturedPreviews] = useState<{ url: string; ev: string }[]>([]);
   const [flashVisual, setFlashVisual] = useState(false);
+  const [showGrid, setShowGrid] = useState(true);
+  const [timerSeconds, setTimerSeconds] = useState<0 | 1>(1);
 
   useEffect(() => {
     const handleOrientation = (e: DeviceOrientationEvent) => {
       if (e.beta !== null && e.gamma !== null) setTilt({ beta: e.beta, gamma: e.gamma });
     };
+
     window.addEventListener("deviceorientation", handleOrientation);
     startCamera();
+
     return () => {
       window.removeEventListener("deviceorientation", handleOrientation);
       stopCamera();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const isLevel = Math.abs(tilt.gamma) < 2;
 
   const startCamera = async () => {
     try {
@@ -57,7 +60,7 @@ export default function CameraCapture() {
           facingMode: "environment",
           width: { ideal: 2560 },
           height: { ideal: 1920 },
-          aspectRatio: { ideal: 1.333333 },
+          aspectRatio: { ideal: 1.333333 }, // 4:3
         },
       });
       if (videoRef.current) {
@@ -74,7 +77,7 @@ export default function CameraCapture() {
     }
   };
 
-  const handleZoom = async (level: number) => {
+  const handleZoom = async (level: 0.5 | 1) => {
     setZoom(level);
     const track = (videoRef.current?.srcObject as MediaStream | null)?.getVideoTracks()[0];
     if (!track) return;
@@ -95,6 +98,7 @@ export default function CameraCapture() {
     canvas: HTMLCanvasElement,
     quality: number,
   ) => {
+    // Garante 4:3
     const targetRatio = 4 / 3;
     const videoRatio = video.videoWidth / video.videoHeight;
     let sw = video.videoWidth,
@@ -120,7 +124,13 @@ export default function CameraCapture() {
     if (!videoRef.current || !canvasRef.current || !user || !propertyId) return;
 
     setIsProcessing(true);
-    setCapturedPreviews([]);
+    setProcessingStep(timerSeconds ? `Disparando em ${timerSeconds}s...` : "Capturando 9 exposições...");
+    setProcessingProgress(2);
+
+    if (timerSeconds) {
+      await new Promise((r) => setTimeout(r, timerSeconds * 1000));
+    }
+
     setProcessingStep("Capturando 9 exposições...");
     setProcessingProgress(5);
 
@@ -141,7 +151,7 @@ export default function CameraCapture() {
     const evList = [-4, -3, -2, -1, 0, 1, 2, 3, 4];
     const anchorIndex = 4;
 
-    // Detecta "window" de forma simples (mesma heurística anterior), mas mantemos pipeline determinístico
+    // Heurística de "window" (mantemos determinístico)
     let look: "interior" | "exterior" | "window" = hdrProfile === "exterior" ? "exterior" : "interior";
     if (hdrProfile === "interior") {
       const probe = drawFrame(ctx, video, canvas, 0.6);
@@ -184,7 +194,6 @@ export default function CameraCapture() {
 
         const frame = drawFrame(ctx, video, canvas, i === anchorIndex ? 0.95 : 0.6);
         frames.push(frame);
-        setCapturedPreviews((prev) => [...prev, { url: frame, ev: `${evList[i]}EV` }]);
 
         setProcessingProgress(10 + i * 5);
         await new Promise((r) => setTimeout(r, 120));
@@ -229,119 +238,209 @@ export default function CameraCapture() {
     }
   };
 
+  const isLevel = Math.abs(tilt.gamma) < 2;
+
+  const videoRotateStyle = useMemo((): React.CSSProperties => {
+    // Tentativa de manter a prévia alinhada à orientação do dispositivo.
+    // Em alguns browsers o vídeo já vem "corrigido"; o scale ajuda a não mostrar bordas.
+    const needsRotate = angle === 90 || angle === 270;
+    const scale = needsRotate ? 1.35 : 1;
+    return {
+      transform: `rotate(${angle}deg) scale(${scale})`,
+      transformOrigin: "center center",
+    };
+  }, [angle]);
+
   return (
-    <div className="fixed inset-0 bg-black z-50 flex flex-col overflow-hidden select-none">
-      <div className="flex-1 relative flex items-center justify-center">
-        <video ref={videoRef} autoPlay playsInline className="w-full aspect-[4/3] object-cover" />
-        <canvas ref={canvasRef} className="hidden" />
+    <div className="fixed inset-0 z-50 bg-black select-none">
+      <div className="flex h-dvh w-full">
+        {/* Viewfinder area (sempre 4:3) */}
+        <div className="relative flex-1 bg-black">
+          <div className="absolute inset-0 flex items-center justify-center px-3 py-3">
+            <div className="relative w-full max-w-[calc(100vw-6.5rem)] aspect-[4/3] overflow-hidden bg-black">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="absolute inset-0 h-full w-full object-cover"
+                style={videoRotateStyle}
+              />
+              <canvas ref={canvasRef} className="hidden" />
 
-        <div
-          className={`absolute inset-0 bg-white transition-opacity duration-75 z-50 pointer-events-none ${
-            flashVisual ? "opacity-80" : "opacity-0"
-          }`}
-        />
+              {/* Flash */}
+              <div
+                className={`absolute inset-0 bg-white transition-opacity duration-75 pointer-events-none ${
+                  flashVisual ? "opacity-70" : "opacity-0"
+                }`}
+              />
 
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-          <div className="w-full aspect-[4/3] relative border border-white/10">
-            <div className="grid grid-cols-3 grid-rows-3 w-full h-full opacity-20">
-              {[...Array(9)].map((_, i) => (
-                <div key={i} className="border border-white/40" />
-              ))}
+              {/* Grid */}
+              {showGrid && (
+                <div className="absolute inset-0 pointer-events-none opacity-25">
+                  <div className="grid h-full w-full grid-cols-3 grid-rows-3">
+                    {[...Array(9)].map((_, i) => (
+                      <div key={i} className="border border-white/50" />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Crosshair */}
+              <div className="pointer-events-none absolute left-1/2 top-1/2 h-[38%] w-[2px] -translate-x-1/2 -translate-y-1/2 bg-red-500/90" />
+              <div className="pointer-events-none absolute left-1/2 top-1/2 h-[2px] w-[38%] -translate-x-1/2 -translate-y-1/2 bg-emerald-400/90" />
+
+              {/* Horizon indicator */}
+              <div
+                className={`pointer-events-none absolute left-1/2 top-1/2 h-[2px] w-56 -translate-x-1/2 -translate-y-1/2 transition-colors ${
+                  isLevel ? "bg-primary" : "bg-white/35"
+                }`}
+                style={{ transform: `translate(-50%, -50%) rotate(${tilt.gamma}deg)` }}
+              />
+
+              {/* Scene selector (como no layout) */}
+              <div className="absolute right-5 top-1/2 -translate-y-1/2">
+                <div className="rounded-2xl bg-black/35 p-3 backdrop-blur-md border border-white/10">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setHdrProfile("interior")}
+                      className={`grid h-11 w-11 place-items-center rounded-xl border transition-colors ${
+                        hdrProfile === "interior"
+                          ? "bg-white/85 text-black border-white/40"
+                          : "bg-white/10 text-white border-white/15"
+                      }`}
+                      aria-label="Interior"
+                    >
+                      <Home className="h-5 w-5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHdrProfile("exterior")}
+                      className={`grid h-11 w-11 place-items-center rounded-xl border transition-colors ${
+                        hdrProfile === "exterior"
+                          ? "bg-white/85 text-black border-white/40"
+                          : "bg-white/10 text-white border-white/15"
+                      }`}
+                      aria-label="Exterior"
+                    >
+                      <ImageIcon className="h-5 w-5" />
+                    </button>
+                  </div>
+                  <div className="mt-2 text-center text-[11px] font-black tracking-[0.24em] text-emerald-300">
+                    {hdrProfile === "interior" ? "INTERIOR" : "EXTERIOR"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Processing overlay */}
+              {isProcessing && (
+                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-xl">
+                  <div className="relative mb-4 h-24 w-24">
+                    <svg className="h-full w-full -rotate-90">
+                      <circle
+                        cx="48"
+                        cy="48"
+                        r="40"
+                        fill="none"
+                        stroke="white"
+                        strokeWidth="4"
+                        className="opacity-10"
+                      />
+                      <circle
+                        cx="48"
+                        cy="48"
+                        r="40"
+                        fill="none"
+                        stroke="hsl(var(--primary))"
+                        strokeWidth="4"
+                        strokeDasharray="251"
+                        strokeDashoffset={251 - (251 * processingProgress) / 100}
+                        strokeLinecap="round"
+                        className="transition-all duration-300"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center font-bold text-white">
+                      {processingProgress}%
+                    </div>
+                  </div>
+                  <p className="animate-pulse text-sm font-bold uppercase tracking-widest text-primary">
+                    {processingStep}
+                  </p>
+                </div>
+              )}
             </div>
-            <div
-              className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-[2px] transition-colors ${
-                isLevel ? "bg-primary" : "bg-white/40"
-              }`}
-              style={{ transform: `translate(-50%, -50%) rotate(${tilt.gamma}deg)` }}
-            />
           </div>
         </div>
 
-        <div className="absolute bottom-32 left-1/2 -translate-x-1/2 flex gap-3 bg-black/40 p-2 rounded-full backdrop-blur-md border border-white/10">
-          {[0.5, 1].map((z) => (
+        {/* Right control rail (como no layout) */}
+        <div className="w-[6.5rem] bg-black flex flex-col items-center justify-between py-10 border-l border-white/5">
+          <button
+            type="button"
+            onClick={() => setShowGrid((s) => !s)}
+            className={`grid h-12 w-12 place-items-center rounded-2xl transition-colors ${
+              showGrid ? "text-white" : "text-white/50"
+            }`}
+            aria-label="Grade"
+          >
+            <Grid3X3 className="h-7 w-7" />
+          </button>
+
+          <div className="flex flex-col items-center gap-7">
             <button
-              key={z}
-              onClick={() => handleZoom(z)}
-              className={`w-10 h-10 rounded-full text-xs font-bold transition-all ${
-                zoom === z ? "bg-primary text-white scale-110" : "text-white/60"
+              type="button"
+              onClick={() => handleZoom(1)}
+              className={`text-lg font-semibold tracking-tight transition-colors ${
+                zoom === 1 ? "text-white" : "text-white/55"
               }`}
             >
-              {z}x
+              1×
             </button>
-          ))}
-        </div>
 
-        {capturedPreviews.length > 0 && (
-          <div className="absolute bottom-48 left-0 right-0 flex justify-center gap-1 px-4 h-12 overflow-hidden">
-            {capturedPreviews.map((p, i) => (
-              <img
-                key={i}
-                src={p.url}
-                alt={`Preview ${i}`}
-                className="h-full aspect-[4/3] object-cover rounded-sm border border-white/20"
-              />
-            ))}
+            <button
+              type="button"
+              onClick={captureSequence}
+              disabled={isProcessing}
+              className="grid h-24 w-24 place-items-center rounded-full border-4 border-white/25 active:scale-[0.98] transition-transform disabled:opacity-60"
+              aria-label="Capturar"
+            >
+              <div className="h-[76px] w-[76px] rounded-full border-2 border-black/60 bg-white" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleZoom(0.5)}
+              className={`text-lg font-semibold tracking-tight transition-colors ${
+                zoom === 0.5 ? "text-white" : "text-white/55"
+              }`}
+            >
+              0.5×
+            </button>
           </div>
-        )}
 
-        {isProcessing && (
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-xl flex flex-col items-center justify-center z-50">
-            <div className="relative w-24 h-24 mb-4">
-              <svg className="w-full h-full -rotate-90">
-                <circle cx="48" cy="48" r="40" fill="none" stroke="white" strokeWidth="4" className="opacity-10" />
-                <circle
-                  cx="48"
-                  cy="48"
-                  r="40"
-                  fill="none"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth="4"
-                  strokeDasharray="251"
-                  strokeDashoffset={251 - (251 * processingProgress) / 100}
-                  strokeLinecap="round"
-                  className="transition-all duration-300"
-                />
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center text-white font-bold">
-                {processingProgress}%
-              </div>
-            </div>
-            <p className="text-primary font-bold text-sm animate-pulse uppercase tracking-widest">{processingStep}</p>
+          <div className="flex flex-col items-center gap-6 pb-[calc(env(safe-area-inset-bottom)+0.25rem)]">
+            <button
+              type="button"
+              onClick={() => setTimerSeconds((s) => (s === 1 ? 0 : 1))}
+              className={`flex items-center gap-2 rounded-2xl px-3 py-2 text-white transition-colors ${
+                timerSeconds ? "text-white" : "text-white/55"
+              }`}
+              aria-label="Timer"
+            >
+              <Timer className="h-6 w-6" />
+              <span className="text-lg font-semibold">{timerSeconds || 0}s</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="grid h-12 w-12 place-items-center rounded-2xl border border-white/40 text-white/90 hover:bg-white/10"
+              aria-label="Fechar"
+            >
+              <X className="h-7 w-7" />
+            </button>
           </div>
-        )}
-      </div>
-
-      <div className="h-40 bg-black flex flex-col items-center justify-center gap-6 relative">
-        <div className="flex gap-4">
-          <button
-            onClick={() => setHdrProfile("interior")}
-            className={`px-6 py-2 rounded-full text-xs font-bold border transition-all ${
-              hdrProfile === "interior" ? "bg-white text-black" : "text-white border-white/20"
-            }`}
-          >
-            INTERIOR
-          </button>
-          <button
-            onClick={() => setHdrProfile("exterior")}
-            className={`px-6 py-2 rounded-full text-xs font-bold border transition-all ${
-              hdrProfile === "exterior" ? "bg-white text-black" : "text-white border-white/20"
-            }`}
-          >
-            EXTERIOR
-          </button>
         </div>
-
-        <button
-          onClick={captureSequence}
-          disabled={isProcessing}
-          className="w-20 h-20 rounded-full border-4 border-white/20 p-1 active:scale-95 transition-all"
-        >
-          <div className="w-full h-full rounded-full bg-white" />
-        </button>
-
-        <button onClick={() => navigate(-1)} className="absolute right-8 text-white/60" aria-label="Fechar">
-          <X className="w-8 h-8" />
-        </button>
       </div>
     </div>
   );
