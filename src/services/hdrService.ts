@@ -33,6 +33,64 @@ export async function listSessions(propertyId: string): Promise<HDRSession[]> {
   );
 }
 
+export async function listRecentHdrImages(
+  userId: string,
+  limit = 12,
+): Promise<{ propertyId: string; url: string; createdAt: string }[]> {
+  console.log("[hdrService] Listing recent HDR images for user:", userId);
+  const { data, error } = await supabase
+    .from("hdr_sessions")
+    .select("property_id, hdr_image_url, created_at")
+    .eq("user_id", userId)
+    .not("hdr_image_url", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error("[hdrService] Error listing recent HDR images:", error);
+    throw new Error(error.message);
+  }
+
+  return (
+    data
+      ?.filter((r) => typeof r.hdr_image_url === "string" && r.hdr_image_url.length > 0)
+      .map((r) => ({
+        propertyId: r.property_id,
+        url: r.hdr_image_url as string,
+        createdAt: r.created_at,
+      })) ?? []
+  );
+}
+
+export async function getFirstHdrCoverByPropertyIds(
+  propertyIds: string[],
+): Promise<Record<string, string>> {
+  if (!propertyIds.length) return {};
+
+  console.log("[hdrService] Getting first HDR cover for properties:", propertyIds.length);
+  const { data, error } = await supabase
+    .from("hdr_sessions")
+    .select("property_id, hdr_image_url, created_at")
+    .in("property_id", propertyIds)
+    .not("hdr_image_url", "is", null)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.error("[hdrService] Error getting first HDR covers:", error);
+    throw new Error(error.message);
+  }
+
+  const map: Record<string, string> = {};
+  for (const row of data ?? []) {
+    const pid = row.property_id as string;
+    const url = row.hdr_image_url as string | null;
+    if (!pid || !url) continue;
+    if (!map[pid]) map[pid] = url;
+  }
+
+  return map;
+}
+
 export async function canCreateHdrSession(userId: string): Promise<{
   ok: boolean;
   usedThisMonth: number;
