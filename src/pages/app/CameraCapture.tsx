@@ -147,14 +147,86 @@ export default function CameraCapture() {
     const track = stream.getVideoTracks()[0];
     const caps: any = track.getCapabilities?.() || {};
 
-    // Pipeline HDR 9 exposures (fixo)
-    const evList = [-4, -3, -2, -1, 0, 1, 2, 3, 4];
-    const anchorIndex = 4;
+    function quantizeToStep(value: number, step: number) {
+      if (!step || step <= 0) return value;
+      return Math.round(value / step) * step;
+    }
+
+    function buildExposureList(capsAny: any) {
+      const exp = capsAny?.exposureCompensation;
+      if (!exp || typeof exp.min !== "number" || typeof exp.max !== "number") {
+        return { evs: null as number[] | null, anchorIndex: 4 };
+      }
+
+      const min = Number(exp.min);
+      const max = Number(exp.max);
+      const step = typeof exp.step === "number" ? Number(exp.step) : 0;
+
+      const points = 9;
+      const anchorIndex = Math.floor(points / 2);
+
+      const amp = Math.min(Math.abs(min), Math.abs(max));
+      if (!Number.isFinite(amp) || amp <= 0) {
+        return { evs: null as number[] | null, anchorIndex };
+      }
+
+      const start = -amp;
+      const end = amp;
+
+      const evs: number[] = [];
+      for (let i = 0; i < points; i++) {
+        const t = i / (points - 1);
+        const v = start + (end - start) * t;
+        const clamped = Math.max(min, Math.min(max, quantizeToStep(v, step)));
+        evs.push(clamped);
+      }
+
+      return { evs, anchorIndex };
+    }
+
+    const { evs: evList, anchorIndex } = buildExposureList(caps);
+
+    if (!evList) {
+      setIsProcessing(false);
+      toast.error("Este dispositivo/browser não suporta bracketing de exposição (HDR via web indisponível).", {
+        duration: 5000,
+      });
+      return;
+    }
+
+    // Melhor captura quando disponível
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ImageCaptureCtor: any = (window as any).ImageCapture;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const imageCapture: any = ImageCaptureCtor ? new ImageCaptureCtor(track) : null;
+
+    async function blobToDataUrl(blob: Blob): Promise<string> {
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error("Falha ao ler imagem"));
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    // Tenta travar AE/WB/foco para não "sabotar" o bracketing
+    try {
+      const adv: any = {};
+      if (caps.exposureMode) adv.exposureMode = "manual";
+      if (caps.whiteBalanceMode) adv.whiteBalanceMode = "manual";
+      if (caps.focusMode) adv.focusMode = "manual";
+      if (Object.keys(adv).length) {
+        await track.applyConstraints({ advanced: [adv] } as any);
+        await new Promise((r) => setTimeout(r, 200));
+      }
+    } catch (e) {
+      console.warn("[CameraCapture] Falha ao travar AE/WB/foco:", e);
+    }
 
     // Heurística de "window" (mantemos determinístico)
     let look: "interior" | "exterior" | "window" = hdrProfile === "exterior" ? "exterior" : "interior";
     if (hdrProfile === "interior") {
-      const probe = drawFrame(ctx, video, canvas, 0.6);
+      const probe = drawFrame(ctx, video, canvas, 0.92);
       const probeImg = await (await fetch(probe)).blob();
       const bmp = await createImageBitmap(probeImg);
       ctx.drawImage(bmp, 0, 0);
@@ -179,32 +251,34 @@ export default function CameraCapture() {
       const frames: string[] = [];
 
       for (let i = 0; i < 9; i++) {
-        if (caps.exposureCompensation) {
-          try {
-            await track.applyConstraints({ advanced: [{ exposureCompensation: evList[i] }] } as any);
-            await new Promise((r) => setTimeout(r, 160));
-          } catch {
-            // ignore
-          }
+        try {
+          await track.applyConstraints({ advanced: [{ exposureCompensation: evList[i] }] } as any);
+          await new Promise((r) => setTimeout(r, 220));
+        } catch (e) {
+          console.warn("[CameraCapture] applyConstraints exposureCompensation falhou:", e, "valor:", evList[i]);
         }
 
         shutterRef.current.play().catch(() => {});
         setFlashVisual(true);
         setTimeout(() => setFlashVisual(false), 50);
 
-        const frame = drawFrame(ctx, video, canvas, i === anchorIndex ? 0.95 : 0.6);
-        frames.push(frame);
+        let frameDataUrl: string;
+        if (imageCapture?.takePhoto) {
+          const blob = await imageCapture.takePhoto();
+          frameDataUrl = await blobToDataUrl(blob);
+        } else {
+          frameDataUrl = drawFrame(ctx, video, canvas, 0.92);
+        }
 
+        frames.push(frameDataUrl);
         setProcessingProgress(10 + i * 5);
         await new Promise((r) => setTimeout(r, 120));
       }
 
-      if (caps.exposureCompensation) {
-        try {
-          await track.applyConstraints({ advanced: [{ exposureCompensation: 0 }] } as any);
-        } catch {
-          // ignore
-        }
+      try {
+        await track.applyConstraints({ advanced: [{ exposureCompensation: 0 }] } as any);
+      } catch {
+        // ignore
       }
 
       setProcessingStep("Fusão HDR (determinístico)...");
@@ -232,6 +306,19 @@ export default function CameraCapture() {
       }
       toast.error(`Erro ao processar imagem: ${errMsg(err)}`);
     } finally {
+      // Tenta devolver modo automático
+      try {
+        const adv: any = {};
+        if (caps.exposureMode) adv.exposureMode = "continuous";
+        if (caps.whiteBalanceMode) adv.whiteBalanceMode = "continuous";
+        if (caps.focusMode) adv.focusMode = "continuous";
+        if (Object.keys(adv).length) {
+          await track.applyConstraints({ advanced: [adv] } as any);
+        }
+      } catch {
+        // ignore
+      }
+
       setIsProcessing(false);
       setProcessingProgress(0);
       setProcessingStep("");
