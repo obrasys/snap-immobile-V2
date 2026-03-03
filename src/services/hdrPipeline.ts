@@ -66,13 +66,32 @@ export async function fuseHdr9Exposure(args: {
   const sumB = new Float32Array(n);
   const sumW = new Float32Array(n);
 
-  const sigma = 0.2;
+  // Look parameters (rápido: melhora interior sem reescrever o pipeline)
+  const sigma =
+    args.look === "interior" ? 0.42 : args.look === "window" ? 0.32 : 0.26;
   const invTwoSigma2 = 1 / (2 * sigma * sigma);
+
+  const shadowLift =
+    args.look === "interior" ? 1.48 : args.look === "window" ? 1.22 : 1.08;
+
+  const highlightCompress =
+    args.look === "exterior" ? 1.1 : args.look === "window" ? 1.18 : 1.06;
+
+  const gamma =
+    args.look === "interior" ? 0.9 : args.look === "window" ? 0.95 : 1.0;
+
+  const ghostThresh =
+    args.look === "interior" ? 0.45 : args.look === "window" ? 0.35 : 0.28;
+
+  const ghostMul =
+    args.look === "interior" ? 0.3 : args.look === "window" ? 0.18 : 0.08;
 
   for (let i = 0; i < 9; i++) {
     const bmp = i === args.anchorIndex ? anchorBmp : await dataUrlToImageBitmap(args.frames[i]);
     drawContain(ctx, bmp, w, h);
     const data = ctx.getImageData(0, 0, w, h).data;
+
+    const ev = args.evs[i] ?? 0;
 
     for (let p = 0; p < n; p++) {
       const idx = p * 4;
@@ -86,25 +105,31 @@ export async function fuseHdr9Exposure(args: {
 
       const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
 
-      // Well-exposedness weight (Mertens-style)
+      // Well-exposedness weight (Mertens-style) — sigma maior p/ interior
       const wExp = Math.exp(-Math.pow(y - 0.5, 2) * invTwoSigma2);
 
       // Saturation weight
       const mu = (r + g + b) / 3;
       const sat = Math.sqrt(((r - mu) ** 2 + (g - mu) ** 2 + (b - mu) ** 2) / 3);
 
-      // Favor mid exposures slightly; EVs are symmetric so this mainly stabilizes
       const wBase = wExp * (0.15 + sat);
 
-      // Ghosting: if differs too much from anchor, downweight to keep geometry/people stable
-      let wFinal = wBase;
+      // EV bias: favorece EV+ em sombras e EV- em highlights
+      let wEv = 1;
+      if (y < 0.35) wEv = 1 + 0.14 * Math.max(0, ev);
+      else if (y > 0.75) wEv = 1 + 0.14 * Math.max(0, -ev);
+
+      let wFinal = wBase * wEv;
+
+      // Ghosting: em interior, o anchor pode ser muito diferente dos frames claros.
+      // Ajustamos threshold e multiplicador por look.
       if (i !== args.anchorIndex) {
         const ar = srgbToLinear(anchor[idx] / 255);
         const ag = srgbToLinear(anchor[idx + 1] / 255);
         const ab = srgbToLinear(anchor[idx + 2] / 255);
         const ay = 0.2126 * ar + 0.7152 * ag + 0.0722 * ab;
-        if (Math.abs(ay - y) > 0.25) {
-          wFinal *= 0.05;
+        if (Math.abs(ay - y) > ghostThresh) {
+          wFinal *= ghostMul;
         }
       }
 
@@ -119,10 +144,6 @@ export async function fuseHdr9Exposure(args: {
   const out = ctx.createImageData(w, h);
   const outData = out.data;
 
-  // Look tuning
-  const shadowLift = args.look === "interior" ? 1.12 : args.look === "window" ? 1.06 : 1.02;
-  const highlightCompress = args.look === "exterior" ? 1.15 : args.look === "window" ? 1.22 : 1.08;
-
   for (let p = 0; p < n; p++) {
     const wsum = sumW[p] || 1e-6;
     let r = sumR[p] / wsum;
@@ -132,11 +153,12 @@ export async function fuseHdr9Exposure(args: {
     // Tone mapping in luminance domain
     const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
 
-    // Shadow lift (gentle)
+    // Shadow lift
     const yLifted = Math.min(10, Math.pow(y, 1 / shadowLift));
 
-    // Highlight compression
-    const yComp = tonemapReinhard(yLifted * highlightCompress);
+    // Highlight compression + gamma (gamma<1 clareia)
+    let yComp = tonemapReinhard(yLifted * highlightCompress);
+    yComp = Math.pow(yComp, gamma);
 
     const scale = y > 1e-6 ? yComp / y : 0;
     r = r * scale;
@@ -160,7 +182,7 @@ export async function fuseHdr9Exposure(args: {
   // Keep original format as close as possible (we only have dataURLs, no HEIC in browser capture)
   const mime = getMimeType(args.frames[args.anchorIndex]) || "image/jpeg";
   const outMime = mime === "image/png" ? "image/png" : "image/jpeg";
-  const quality = outMime === "image/jpeg" ? 0.92 : undefined;
+  const quality: number | undefined = outMime === "image/jpeg" ? 0.92 : undefined;
 
-  return canvas.toDataURL(outMime, quality as any);
+  return canvas.toDataURL(outMime, quality);
 }
