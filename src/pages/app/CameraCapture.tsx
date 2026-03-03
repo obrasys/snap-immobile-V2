@@ -28,11 +28,13 @@ export default function CameraCapture() {
   const navigate = useNavigate();
   const { id: propertyId } = useParams();
   const { user } = useAuth();
-  const { angle } = useOrientationAngle();
+  const { isLandscape } = useOrientationAngle();
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const shutterRef = useRef<HTMLAudioElement>(new Audio(SHUTTER_SOUND));
+
+  const [videoDims, setVideoDims] = useState({ w: 0, h: 0 });
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState("");
@@ -57,6 +59,25 @@ export default function CameraCapture() {
       stopCamera();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    const update = () => {
+      if (!v.videoWidth || !v.videoHeight) return;
+      setVideoDims({ w: v.videoWidth, h: v.videoHeight });
+    };
+
+    v.addEventListener("loadedmetadata", update);
+    // Alguns browsers disparam 'resize' quando o stream muda de dimensão.
+    v.addEventListener("resize", update);
+
+    return () => {
+      v.removeEventListener("loadedmetadata", update);
+      v.removeEventListener("resize", update);
+    };
   }, []);
 
   const startCamera = async () => {
@@ -409,15 +430,23 @@ export default function CameraCapture() {
   const isLevel = Math.abs(tilt.gamma) < 2;
 
   const videoRotateStyle = useMemo((): React.CSSProperties => {
-    // Tentativa de manter a prévia alinhada à orientação do dispositivo.
-    // Em alguns browsers o vídeo já vem "corrigido"; o scale ajuda a não mostrar bordas.
-    const needsRotate = angle === 90 || angle === 270;
+    // Alguns dispositivos/WebViews entregam o stream "deitado".
+    // Fazemos uma correção simples baseada na orientação do device x dimensões do vídeo.
+    const hasDims = videoDims.w > 0 && videoDims.h > 0;
+    const videoIsLandscape = hasDims ? videoDims.w >= videoDims.h : true;
+
+    let rotate = 0;
+    if (!isLandscape && videoIsLandscape) rotate = 90;
+    if (isLandscape && !videoIsLandscape) rotate = -90;
+
+    const needsRotate = Math.abs(rotate) === 90;
     const scale = needsRotate ? 1.35 : 1;
+
     return {
-      transform: `rotate(${angle}deg) scale(${scale})`,
+      transform: `rotate(${rotate}deg) scale(${scale})`,
       transformOrigin: "center center",
     };
-  }, [angle]);
+  }, [isLandscape, videoDims.h, videoDims.w]);
 
   return (
     <div className="fixed inset-0 z-50 bg-black select-none">
