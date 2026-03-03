@@ -4,8 +4,25 @@ import { reverseGeocodeNominatim, type ReverseGeocodeResult } from "@/services/g
 export type PinState =
   | { status: "pin_idle" }
   | { status: "pin_loading" }
-  | { status: "pin_success"; result: ReverseGeocodeResult; coords: { lat: number; lng: number } }
-  | { status: "pin_error"; reason: "permission" | "gps" | "geocode"; message: string };
+  | {
+      status: "pin_success";
+      result: ReverseGeocodeResult;
+      coords: { lat: number; lng: number };
+    }
+  | {
+      status: "pin_error";
+      reason: "permission" | "gps" | "geocode";
+      message: string;
+    };
+
+function isGeolocationError(err: unknown): err is GeolocationPositionError {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    typeof (err as { code?: unknown }).code === "number"
+  );
+}
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -23,7 +40,10 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-function getCoords(args: { enableHighAccuracy: boolean; timeoutMs: number }): Promise<GeolocationCoordinates> {
+function getCoords(args: {
+  enableHighAccuracy: boolean;
+  timeoutMs: number;
+}): Promise<GeolocationCoordinates> {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(Object.assign(new Error("Geolocation unavailable"), { code: "UNAVAILABLE" }));
@@ -56,14 +76,20 @@ export function usePinLocation() {
     let isApproximate = false;
 
     try {
-      coords = await withTimeout(getCoords({ enableHighAccuracy: true, timeoutMs: 7000 }), 8000);
-    } catch (e: any) {
+      coords = await withTimeout(
+        getCoords({ enableHighAccuracy: true, timeoutMs: 7000 }),
+        8000,
+      );
+    } catch {
       // fallback: precisão normal
       try {
-        coords = await withTimeout(getCoords({ enableHighAccuracy: false, timeoutMs: 8000 }), 9000);
+        coords = await withTimeout(
+          getCoords({ enableHighAccuracy: false, timeoutMs: 8000 }),
+          9000,
+        );
         isApproximate = true;
-      } catch (err: any) {
-        if (err?.code === 1 /* PERMISSION_DENIED */) {
+      } catch (err: unknown) {
+        if (isGeolocationError(err) && err.code === 1 /* PERMISSION_DENIED */) {
           setPinState({
             status: "pin_error",
             reason: "permission",

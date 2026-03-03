@@ -2,6 +2,28 @@ import type { User, UserRole, UserPlan } from "@/lib/models";
 import { supabase, hasSupabase } from "@/integrations/supabase/client";
 import { getProfile, upsertProfile } from "@/services/profileService";
 
+export type RegisterArgs = {
+  name: string;
+  lastName?: string;
+  email: string;
+  password: string;
+  phone?: string;
+  cpf?: string;
+  company?: string;
+  role?: UserRole;
+};
+
+function readString(meta: Record<string, unknown>, key: string): string | undefined {
+  const v = meta[key];
+  return typeof v === "string" && v.trim().length ? v : undefined;
+}
+
+function readRole(meta: Record<string, unknown>): UserRole | undefined {
+  const v = readString(meta, "role");
+  if (v === "corretor" || v === "proprietario" || v === "fotografo" || v === "outro") return v;
+  return undefined;
+}
+
 export async function getCurrentUser(): Promise<User | null> {
   if (!hasSupabase) return null;
 
@@ -16,16 +38,17 @@ export async function getCurrentUser(): Promise<User | null> {
     // Se o usuário existe no Auth mas ainda não tem linha em profiles,
     // criamos automaticamente para evitar travar o app no login.
     if (!profileData) {
-      const meta: any = au.user_metadata ?? {};
+      const meta: Record<string, unknown> = (au.user_metadata ?? {}) as Record<string, unknown>;
+
       await upsertProfile({
         id: au.id,
-        firstName: meta.first_name ?? meta.name ?? "Usuário",
-        lastName: meta.last_name ?? "",
+        firstName: readString(meta, "first_name") ?? readString(meta, "name") ?? "Usuário",
+        lastName: readString(meta, "last_name") ?? "",
         email: au.email ?? "",
-        phone: "",
-        cpf: "",
-        company: "",
-        role: "corretor" as UserRole,
+        phone: readString(meta, "phone") ?? "",
+        cpf: readString(meta, "cpf") ?? "",
+        company: readString(meta, "company") ?? "",
+        role: (readRole(meta) ?? "corretor") as UserRole,
         plan: "free" as UserPlan,
         avatarUrl: "",
       });
@@ -75,12 +98,7 @@ export async function loginWithGoogle(): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-export async function registerWithEmail(args: {
-  name: string;
-  lastName?: string;
-  email: string;
-  password: string;
-}): Promise<void> {
+export async function registerWithEmail(args: RegisterArgs): Promise<void> {
   const { error } = await supabase.auth.signUp({
     email: args.email,
     password: args.password,
@@ -88,6 +106,10 @@ export async function registerWithEmail(args: {
       data: {
         first_name: args.name,
         last_name: args.lastName ?? "",
+        phone: args.phone ?? "",
+        cpf: args.cpf ?? "",
+        company: args.company ?? "",
+        role: args.role ?? "corretor",
       },
     },
   });

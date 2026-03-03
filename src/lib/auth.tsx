@@ -7,6 +7,7 @@ import {
   logout,
   registerWithEmail,
   requestPasswordReset,
+  type RegisterArgs,
 } from "@/services/authService";
 import { supabase, hasSupabase } from "@/integrations/supabase/client";
 
@@ -16,7 +17,7 @@ type AuthContextValue = {
   refresh: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   loginGoogle: () => Promise<void>;
-  register: (args: any) => Promise<void>;
+  register: (args: RegisterArgs) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
 };
@@ -63,13 +64,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isReady,
       refresh,
       login: async (email: string, pass: string) => {
-        await loginWithEmail(email, pass);
-        await refresh();
+        const u = await loginWithEmail(email, pass);
+        setUser(u);
       },
       loginGoogle: async () => {
         await loginWithGoogle();
       },
-      register: async (args: any) => {
+      register: async (args: RegisterArgs) => {
         await registerWithEmail(args);
       },
       resetPassword: async (email: string) => {

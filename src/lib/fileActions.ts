@@ -16,15 +16,19 @@ export function downloadDataUrl(dataUrl: string, filename: string) {
   a.remove();
 }
 
+type NavigatorWithShare = Navigator & {
+  share?: (data: { files: File[]; title?: string }) => Promise<void>;
+  canShare?: (data: { files: File[] }) => boolean;
+};
+
 export async function shareDataUrl(dataUrl: string, filename: string) {
   const blob = dataUrlToBlob(dataUrl);
   const file = new File([blob], filename, { type: blob.type });
 
   // Web Share API (mobile browsers)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const navAny = navigator as any;
-  if (navAny.share && (!navAny.canShare || navAny.canShare({ files: [file] }))) {
-    await navAny.share({ files: [file], title: "Snap Immobile HDR" });
+  const nav = navigator as NavigatorWithShare;
+  if (nav.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
+    await nav.share({ files: [file], title: "Snap Immobile HDR" });
     return;
   }
 

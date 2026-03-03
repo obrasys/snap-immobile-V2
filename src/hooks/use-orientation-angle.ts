@@ -1,15 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 
+type ScreenWithOrientation = Screen & {
+  orientation?: {
+    angle?: number;
+    addEventListener?: (type: string, listener: () => void) => void;
+    removeEventListener?: (type: string, listener: () => void) => void;
+  };
+};
+
+type WindowWithLegacyOrientation = Window & { orientation?: number };
+
 function getAngle(): number {
   // Prefer Screen Orientation API
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const scr: any = typeof screen !== "undefined" ? (screen as any) : undefined;
+  const scr = (typeof screen !== "undefined" ? screen : undefined) as ScreenWithOrientation | undefined;
   const angle = scr?.orientation?.angle;
   if (typeof angle === "number") return angle;
 
   // iOS Safari legacy
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const w: any = typeof window !== "undefined" ? (window as any) : undefined;
+  const w = (typeof window !== "undefined" ? window : undefined) as WindowWithLegacyOrientation | undefined;
   const wAngle = w?.orientation;
   if (typeof wAngle === "number") return wAngle;
 
@@ -26,8 +34,7 @@ export function useOrientationAngle() {
     window.addEventListener("resize", update);
 
     // Screen Orientation API
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const scr: any = screen as any;
+    const scr = screen as ScreenWithOrientation;
     scr?.orientation?.addEventListener?.("change", update);
 
     return () => {

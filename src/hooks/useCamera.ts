@@ -2,6 +2,28 @@ import { useState, useRef, useEffect, useCallback } from "react";
 
 type ZoomPreset = 0.5 | 1.0;
 
+type MediaSettingsRangeLike = {
+  min?: number;
+  max?: number;
+  step?: number;
+};
+
+type ExtendedMediaTrackCapabilities = MediaTrackCapabilities & {
+  exposureCompensation?: MediaSettingsRangeLike;
+};
+
+type ExtendedMediaTrackConstraintSet = MediaTrackConstraintSet & {
+  exposureCompensation?: number;
+};
+
+function getErrorName(err: unknown): string | null {
+  if (typeof err === "object" && err !== null && "name" in err) {
+    const name = (err as { name?: unknown }).name;
+    return typeof name === "string" ? name : null;
+  }
+  return null;
+}
+
 export function useCamera() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -20,7 +42,7 @@ export function useCamera() {
   const refreshDevices = useCallback(async () => {
     try {
       const list = await navigator.mediaDevices.enumerateDevices();
-      const vids = list.filter(d => d.kind === "videoinput");
+      const vids = list.filter((d) => d.kind === "videoinput");
       setDevices(vids);
       return vids;
     } catch {
@@ -29,32 +51,36 @@ export function useCamera() {
   }, []);
 
   const findUltraWide = useCallback((vids: MediaDeviceInfo[]) => {
-    return vids.find(d => /ultra|0\.5|ultrawide|ultra wide/i.test(d.label))?.deviceId ?? null;
+    return (
+      vids.find((d) => /ultra|0\.5|ultrawide|ultra wide/i.test(d.label))?.deviceId ??
+      null
+    );
   }, []);
 
   const findBackMain = useCallback((vids: MediaDeviceInfo[]) => {
-    const back = vids.find(d => /back|rear|traseira|environment/i.test(d.label));
+    const back = vids.find((d) => /back|rear|traseira|environment/i.test(d.label));
     if (back?.deviceId) return back.deviceId;
     return vids[0]?.deviceId ?? null;
   }, []);
 
   const applyExposureCompensation = useCallback(async (ev: number) => {
     const track = trackRef.current;
-    if (!track || !track.getCapabilities || !track.getSettings) {
+    if (!track || !track.getCapabilities) {
       setSupportsExposureCompensation(false);
       return;
     }
 
-    const capabilities = track.getCapabilities();
-    // @ts-ignore
+    const capabilities = track.getCapabilities() as ExtendedMediaTrackCapabilities;
     if (capabilities.exposureCompensation) {
       try {
-        // @ts-ignore
-        await track.applyConstraints({ advanced: [{ exposureCompensation: ev }] });
+        const constraints = {
+          advanced: [{ exposureCompensation: ev } satisfies ExtendedMediaTrackConstraintSet],
+        };
+        await track.applyConstraints(constraints as unknown as MediaTrackConstraints);
         setSupportsExposureCompensation(true);
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.warn("[useCamera] Failed to apply exposure compensation:", e);
-        if (e.name === "OverconstrainedError") {
+        if (getErrorName(e) === "OverconstrainedError") {
           setSupportsExposureCompensation(false);
         }
       }
@@ -73,18 +99,18 @@ export function useCamera() {
       setCameraError(null);
 
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current.getTracks().forEach((t) => t.stop());
       }
 
       const baseVideo: MediaTrackConstraints = {
         facingMode: { ideal: "environment" },
         width: { ideal: 4032 },
-        height: { ideal: 3024 }
+        height: { ideal: 3024 },
       };
 
       if (deviceId) {
         delete baseVideo.facingMode;
-        baseVideo.deviceId = deviceId; // Alterado de { exact: deviceId } para deviceId (ideal)
+        baseVideo.deviceId = deviceId;
       }
 
       try {
@@ -103,59 +129,65 @@ export function useCamera() {
           const main = findBackMain(vids);
           if (main) setSelectedDeviceId(main);
         }
-        // Check capabilities after stream is active
-        const capabilities = track.getCapabilities();
-        // @ts-ignore
-        setSupportsExposureCompensation(!!capabilities.exposureCompensation);
-        await applyExposureCompensation(manualEv);
 
-      } catch (err: any) {
-        console.error("Camera init error:", err);
-        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-            setCameraError("Acesso à câmara negado. Verifique as permissões.");
-        } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
-            setCameraError("Nenhuma câmara encontrada.");
-        } else if (err.name === "OverconstrainedError") {
-            setCameraError("Câmara não suporta as configurações solicitadas (ex: resolução).");
-            setSupportsExposureCompensation(false); // Explicitly set to false if initial constraints fail
+        // Check capabilities after stream is active
+        const capabilities = track.getCapabilities?.() as ExtendedMediaTrackCapabilities | undefined;
+        setSupportsExposureCompensation(!!capabilities?.exposureCompensation);
+        await applyExposureCompensation(manualEv);
+      } catch (err: unknown) {
+        console.error("[useCamera] Camera init error:", err);
+        const name = getErrorName(err);
+
+        if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+          setCameraError("Acesso à câmara negado. Verifique as permissões.");
+        } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+          setCameraError("Nenhuma câmara encontrada.");
+        } else if (name === "OverconstrainedError") {
+          setCameraError(
+            "Câmara não suporta as configurações solicitadas (ex: resolução).",
+          );
+          setSupportsExposureCompensation(false);
         } else {
-            setCameraError("Erro ao iniciar a câmara.");
+          setCameraError("Erro ao iniciar a câmara.");
         }
       }
     },
-    [refreshDevices, selectedDeviceId, findBackMain, applyExposureCompensation, manualEv]
+    [refreshDevices, selectedDeviceId, findBackMain, applyExposureCompensation, manualEv],
   );
 
   useEffect(() => {
-    startCamera(null); // Start with default back camera
+    startCamera(null);
     return () => {
-      streamRef.current?.getTracks().forEach(t => t.stop());
+      streamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, [startCamera]);
 
   useEffect(() => {
-    if (trackRef.current && supportsExposureCompensation) { // Only apply if supported
+    if (trackRef.current && supportsExposureCompensation) {
       applyExposureCompensation(manualEv);
     }
   }, [manualEv, applyExposureCompensation, supportsExposureCompensation]);
 
-  const handleZoomPreset = useCallback(async (preset: ZoomPreset) => {
-    setZoomPreset(preset);
-    const vids = devices.length ? devices : await refreshDevices();
-    if (preset === 0.5) {
-      const ultraId = findUltraWide(vids);
-      if (ultraId) {
-        setSelectedDeviceId(ultraId);
-        await startCamera(ultraId);
-        return;
+  const handleZoomPreset = useCallback(
+    async (preset: ZoomPreset) => {
+      setZoomPreset(preset);
+      const vids = devices.length ? devices : await refreshDevices();
+      if (preset === 0.5) {
+        const ultraId = findUltraWide(vids);
+        if (ultraId) {
+          setSelectedDeviceId(ultraId);
+          await startCamera(ultraId);
+          return;
+        }
       }
-    }
-    const mainId = findBackMain(vids);
-    if (mainId) {
-      setSelectedDeviceId(mainId);
-      await startCamera(mainId);
-    }
-  }, [devices, refreshDevices, findUltraWide, findBackMain, startCamera]);
+      const mainId = findBackMain(vids);
+      if (mainId) {
+        setSelectedDeviceId(mainId);
+        await startCamera(mainId);
+      }
+    },
+    [devices, refreshDevices, findUltraWide, findBackMain, startCamera],
+  );
 
   return {
     videoRef,
@@ -170,6 +202,6 @@ export function useCamera() {
     maxEv,
     applyExposureCompensation,
     startCamera,
-    supportsExposureCompensation, // Expose this state
+    supportsExposureCompensation,
   };
 }
