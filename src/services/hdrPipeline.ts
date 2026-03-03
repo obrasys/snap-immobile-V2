@@ -37,6 +37,10 @@ function clamp01(x: number) {
   return Math.min(1, Math.max(0, x));
 }
 
+function luminance(r: number, g: number, b: number) {
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
 // Peso triangular (evita sombras muito escuras e highlights estourados)
 function triangularWeight(y: number) {
   // y em linear [0..1] aproximado. Pico no meio
@@ -44,8 +48,126 @@ function triangularWeight(y: number) {
   return Math.max(0, w);
 }
 
-function reinhard(x: number) {
-  return x / (1 + x);
+function boxBlur1D(
+  src: Float32Array,
+  w: number,
+  h: number,
+  radius: number,
+  horizontal: boolean,
+) {
+  const dst = new Float32Array(src.length);
+  if (radius <= 0) {
+    dst.set(src);
+    return dst;
+  }
+
+  const win = radius * 2 + 1;
+
+  if (horizontal) {
+    for (let y = 0; y < h; y++) {
+      let sum = 0;
+      const row = y * w;
+
+      // init window
+      for (let x = -radius; x <= radius; x++) {
+        const xx = Math.min(w - 1, Math.max(0, x));
+        sum += src[row + xx];
+      }
+
+      for (let x = 0; x < w; x++) {
+        dst[row + x] = sum / win;
+
+        const xOut = x - radius;
+        const xIn = x + radius + 1;
+
+        const xxOut = Math.min(w - 1, Math.max(0, xOut));
+        const xxIn = Math.min(w - 1, Math.max(0, xIn));
+
+        sum += src[row + xxIn] - src[row + xxOut];
+      }
+    }
+  } else {
+    for (let x = 0; x < w; x++) {
+      let sum = 0;
+
+      for (let y = -radius; y <= radius; y++) {
+        const yy = Math.min(h - 1, Math.max(0, y));
+        sum += src[yy * w + x];
+      }
+
+      for (let y = 0; y < h; y++) {
+        dst[y * w + x] = sum / win;
+
+        const yOut = y - radius;
+        const yIn = y + radius + 1;
+
+        const yyOut = Math.min(h - 1, Math.max(0, yOut));
+        const yyIn = Math.min(h - 1, Math.max(0, yIn));
+
+        sum += src[yyIn * w + x] - src[yyOut * w + x];
+      }
+    }
+  }
+
+  return dst;
+}
+
+function boxBlur2D(src: Float32Array, w: number, h: number, radius: number) {
+  const tmp = boxBlur1D(src, w, h, radius, true);
+  return boxBlur1D(tmp, w, h, radius, false);
+}
+
+// Tone mapping local via base/detail em log luminance
+function localTonemapLogLuma(
+  Y: Float32Array,
+  w: number,
+  h: number,
+  params: {
+    radius: number; // 8..24
+    baseCompression: number; // 0.35..0.65
+    detailBoost: number; // 1.0..1.25
+    gamma: number; // 0.88..1.0
+    highlight: number; // 1.05..1.25
+    shadow: number; // 1.1..1.7
+  },
+) {
+  const eps = 1e-6;
+  const logY = new Float32Array(Y.length);
+
+  for (let i = 0; i < Y.length; i++) {
+    logY[i] = Math.log(Math.max(eps, Y[i]));
+  }
+
+  // base = blur(logY)
+  const base = boxBlur2D(logY, w, h, params.radius);
+
+  const outY = new Float32Array(Y.length);
+
+  for (let i = 0; i < Y.length; i++) {
+    const detail = logY[i] - base[i];
+
+    // compressão do base
+    const baseCompressed = base[i] * params.baseCompression;
+
+    // reconstrução log
+    let logOut = baseCompressed + detail * params.detailBoost;
+
+    // volta pra linear
+    let y = Math.exp(logOut);
+
+    // shadow lift
+    y = Math.pow(y, 1 / params.shadow);
+
+    // highlight compression (Reinhard-like)
+    y = (y * params.highlight) / (1 + y * params.highlight);
+
+    // gamma final
+    y = Math.pow(Math.max(0, y), params.gamma);
+
+    outY[i] = y;
+  }
+
+  return outY;
 }
 
 export async function fuseHdr9Exposure(args: {
@@ -84,16 +206,6 @@ export async function fuseHdr9Exposure(args: {
   const sumB = new Float32Array(n);
   const sumW = new Float32Array(n);
 
-  // Params por look
-  const shadowLift =
-    args.look === "interior" ? 1.55 : args.look === "window" ? 1.25 : 1.08;
-
-  const highlightCompress =
-    args.look === "window" ? 1.25 : args.look === "exterior" ? 1.12 : 1.08;
-
-  const gamma =
-    args.look === "interior" ? 0.9 : args.look === "window" ? 0.95 : 1.0;
-
   // Deghost: mais permissivo em interior, mais restrito em exterior
   const ghostThresh =
     args.look === "interior" ? 0.4 : args.look === "window" ? 0.33 : 0.26;
@@ -124,14 +236,12 @@ export async function fuseHdr9Exposure(args: {
       const g = srgbToLinear(data[idx + 1] / 255);
       const b = srgbToLinear(data[idx + 2] / 255);
 
-      // luminância linear
-      const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const y = luminance(r, g, b);
 
       // Peso base: evita extremos
       let wBase = triangularWeight(y);
 
       // Se frame muito escuro/estourado, quase ignora
-      // (ajuda a reduzir ruído de sombras e clipping)
       if (y < 0.02 || y > 0.98) wBase *= 0.05;
 
       // EV bias: em sombras, pref EV+; em highlights, pref EV-
@@ -146,7 +256,7 @@ export async function fuseHdr9Exposure(args: {
         const ar = srgbToLinear(anchor[idx] / 255);
         const ag = srgbToLinear(anchor[idx + 1] / 255);
         const ab = srgbToLinear(anchor[idx + 2] / 255);
-        const ay = 0.2126 * ar + 0.7152 * ag + 0.0722 * ab;
+        const ay = luminance(ar, ag, ab);
 
         if (Math.abs(ay - y) > ghostThresh) {
           wFinal *= ghostMul;
@@ -154,20 +264,12 @@ export async function fuseHdr9Exposure(args: {
       }
 
       // Radiance aproximada: linear / 2^EV
-      const rr = r * invExposure;
-      const gg = g * invExposure;
-      const bb = b * invExposure;
-
-      sumR[p] += rr * wFinal;
-      sumG[p] += gg * wFinal;
-      sumB[p] += bb * wFinal;
+      sumR[p] += r * invExposure * wFinal;
+      sumG[p] += g * invExposure * wFinal;
+      sumB[p] += b * invExposure * wFinal;
       sumW[p] += wFinal;
     }
   }
-
-  // Escreve saída com tone mapping
-  const out = ctx.createImageData(w, h);
-  const outData = out.data;
 
   // Auto-exposure global simples: usa yMax como referência (com clamp)
   let yMax = 0;
@@ -176,12 +278,59 @@ export async function fuseHdr9Exposure(args: {
     const r = sumR[p] / wsum;
     const g = sumG[p] / wsum;
     const b = sumB[p] / wsum;
-    const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const y = luminance(r, g, b);
     if (y > yMax) yMax = y;
   }
 
   const ref = Math.max(0.6, Math.min(4.0, yMax));
   const exposure = 0.9 / ref;
+
+  // Nível 3: tone mapping local (base/detail) em log-luma
+
+  // 1) monta luminância HDR já exposta
+  const Yin = new Float32Array(n);
+  for (let p = 0; p < n; p++) {
+    const wsum = sumW[p] || 1e-6;
+    const r = (sumR[p] / wsum) * exposure;
+    const g = (sumG[p] / wsum) * exposure;
+    const b = (sumB[p] / wsum) * exposure;
+    Yin[p] = luminance(r, g, b);
+  }
+
+  // 2) parâmetros por look (Nodalview-like)
+  const ltParams =
+    args.look === "interior"
+      ? {
+          radius: 18,
+          baseCompression: 0.48,
+          detailBoost: 1.12,
+          gamma: 0.9,
+          highlight: 1.18,
+          shadow: 1.55,
+        }
+      : args.look === "window"
+        ? {
+            radius: 14,
+            baseCompression: 0.55,
+            detailBoost: 1.08,
+            gamma: 0.95,
+            highlight: 1.22,
+            shadow: 1.25,
+          }
+        : {
+            radius: 10,
+            baseCompression: 0.62,
+            detailBoost: 1.05,
+            gamma: 1.0,
+            highlight: 1.12,
+            shadow: 1.1,
+          };
+
+  const Yout = localTonemapLogLuma(Yin, w, h, ltParams);
+
+  // 3) escreve imagem final mantendo cor (chroma)
+  const out = ctx.createImageData(w, h);
+  const outData = out.data;
 
   for (let p = 0; p < n; p++) {
     const wsum = sumW[p] || 1e-6;
@@ -190,17 +339,10 @@ export async function fuseHdr9Exposure(args: {
     let g = (sumG[p] / wsum) * exposure;
     let b = (sumB[p] / wsum) * exposure;
 
-    // Luminância no domínio radiance (já “HDR”)
-    const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const yIn = Yin[p];
+    const yOut = Yout[p];
 
-    // Lift de sombras
-    const yLifted = Math.pow(Math.max(0, y), 1 / shadowLift);
-
-    // Compressão de highlights + gamma
-    let yComp = reinhard(yLifted * highlightCompress);
-    yComp = Math.pow(yComp, gamma);
-
-    const scale = y > 1e-6 ? yComp / y : 0;
+    const scale = yIn > 1e-6 ? yOut / yIn : 0;
 
     r = clamp01(r * scale);
     g = clamp01(g * scale);
