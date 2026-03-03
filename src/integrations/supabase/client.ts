@@ -9,7 +9,6 @@ const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_656kn__SFDA4ayT0IPpVFQ_kyjkJ9RN
 
 const PROJECT_REF = "coqaiwjpmgfkonlymtbg";
 const AUTH_STORAGE_KEY = `sb-${PROJECT_REF}-auth-token`;
-const AUTH_CODE_VERIFIER_KEY = `sb-${PROJECT_REF}-auth-token-code-verifier`;
 
 const safeStorage: Storage = {
   get length() {
@@ -26,9 +25,9 @@ const safeStorage: Storage = {
       const v = localStorage.getItem(key);
       if (!v) return v;
 
-      // If a Supabase auth token gets corrupted (partial write / invalid JSON),
+      // If the Supabase auth token gets corrupted (partial write / invalid JSON),
       // supabase-js can break until site data is cleared. We proactively repair it.
-      if (key === AUTH_STORAGE_KEY || key === AUTH_CODE_VERIFIER_KEY) {
+      if (key === AUTH_STORAGE_KEY) {
         try {
           JSON.parse(v);
         } catch {
