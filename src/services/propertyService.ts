@@ -137,3 +137,13 @@ export async function createProperty(args: {
     addressFull: args.address,
   });
 }
+
+export async function deleteProperty(propertyId: string) {
+  console.log("[propertyService] Deleting property:", propertyId);
+  const { error } = await supabase.from("properties").delete().eq("id", propertyId);
+  if (error) {
+    console.error("[propertyService] Error deleting property:", error);
+    throw new Error(error.message);
+  }
+  console.log("[propertyService] Property deleted:", propertyId);
+}

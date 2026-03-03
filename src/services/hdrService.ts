@@ -197,3 +197,45 @@ export async function uploadHdrImage(userId: string, sessionId: string, base64Im
   console.log("[hdrService] Image uploaded and public URL obtained:", publicUrlData.publicUrl);
   return publicUrlData.publicUrl;
 }
+
+function storagePathFromPublicUrl(publicUrl: string): string | null {
+  // Typical format:
+  // https://.../storage/v1/object/public/<bucket>/<path>
+  const marker = "/storage/v1/object/public/snap-immobile-photos/";
+  const idx = publicUrl.indexOf(marker);
+  if (idx === -1) return null;
+  const path = publicUrl.slice(idx + marker.length);
+  return path.length ? decodeURIComponent(path) : null;
+}
+
+export async function deleteHdrSessions(sessions: { id: string; hdrImageUrl?: string }[]) {
+  if (!sessions.length) return;
+
+  console.log("[hdrService] Deleting HDR sessions:", sessions.length);
+
+  const pathsToRemove = sessions
+    .map((s) => (s.hdrImageUrl ? storagePathFromPublicUrl(s.hdrImageUrl) : null))
+    .filter((p): p is string => typeof p === "string" && p.length > 0);
+
+  if (pathsToRemove.length) {
+    const { error: storageError } = await supabase
+      .storage
+      .from("snap-immobile-photos")
+      .remove(pathsToRemove);
+
+    if (storageError) {
+      console.error("[hdrService] Error removing HDR images from storage:", storageError);
+      throw new Error(storageError.message);
+    }
+  }
+
+  const ids = sessions.map((s) => s.id);
+  const { error } = await supabase.from("hdr_sessions").delete().in("id", ids);
+
+  if (error) {
+    console.error("[hdrService] Error deleting HDR sessions:", error);
+    throw new Error(error.message);
+  }
+
+  console.log("[hdrService] HDR sessions deleted:", sessions.length);
+}
