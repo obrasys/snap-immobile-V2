@@ -282,8 +282,8 @@ export async function fuseHdr9Exposure(args: {
     if (y > yMax) yMax = y;
   }
 
-  const ref = Math.max(0.6, Math.min(4.0, yMax));
-  const exposure = 0.9 / ref;
+  const ref = Math.max(0.8, Math.min(3.0, yMax));
+  const exposure = 0.75 / ref;
 
   // Nível 3: tone mapping local (base/detail) em log-luma
 
@@ -301,29 +301,29 @@ export async function fuseHdr9Exposure(args: {
   const ltParams =
     args.look === "interior"
       ? {
-          radius: 18,
-          baseCompression: 0.48,
-          detailBoost: 1.12,
-          gamma: 0.9,
-          highlight: 1.18,
-          shadow: 1.55,
+          radius: 16,
+          baseCompression: 0.6,
+          detailBoost: 1.08,
+          gamma: 0.96,
+          highlight: 1.1,
+          shadow: 1.3,
         }
       : args.look === "window"
         ? {
             radius: 14,
-            baseCompression: 0.55,
-            detailBoost: 1.08,
-            gamma: 0.95,
-            highlight: 1.22,
-            shadow: 1.25,
+            baseCompression: 0.62,
+            detailBoost: 1.06,
+            gamma: 0.97,
+            highlight: 1.18,
+            shadow: 1.2,
           }
         : {
             radius: 10,
-            baseCompression: 0.62,
-            detailBoost: 1.05,
+            baseCompression: 0.68,
+            detailBoost: 1.03,
             gamma: 1.0,
-            highlight: 1.12,
-            shadow: 1.1,
+            highlight: 1.1,
+            shadow: 1.08,
           };
 
   const Yout = localTonemapLogLuma(Yin, w, h, ltParams);
